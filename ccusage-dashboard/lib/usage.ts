@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -9,12 +9,15 @@ const MAX_BUFFER = 24 * 1024 * 1024;
 const SUPPORTED_DAYS = new Set([7, 14, 30, 90]);
 
 export type UsageSource = "codex" | "all";
+export type UsageDeviceFilter = "all" | "local" | string;
 
 export type UsageDevice = {
   dailyEntries: number;
   id: string;
   kind: "imported" | "local";
+  latestDate: string | null;
   name: string;
+  updatedAt: string | null;
 };
 
 export type UsageTotals = {
@@ -45,6 +48,7 @@ export type UsageModel = UsageTotals & {
 };
 
 export type UsageSnapshot = {
+  activeDeviceIds: string[];
   daily: UsagePeriod[];
   dataPath: string;
   devices: UsageDevice[];
@@ -322,17 +326,21 @@ function deviceNameFromFile(fileName: string): string {
   return stem.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function latestLabel(periods: UsagePeriod[]): string | null {
+  return periods.length ? periods.at(-1)?.label ?? null : null;
+}
+
 function readImportedUsage(): {
-  daily: UsagePeriod[];
+  dailyByDevice: Record<string, UsagePeriod[]>;
   devices: UsageDevice[];
   raw: Record<string, unknown>;
 } {
   const directory = join(process.cwd(), "data", "devices");
   if (!existsSync(directory)) {
-    return { daily: [], devices: [], raw: {} };
+    return { dailyByDevice: {}, devices: [], raw: {} };
   }
 
-  const daily: UsagePeriod[] = [];
+  const dailyByDevice: Record<string, UsagePeriod[]> = {};
   const devices: UsageDevice[] = [];
   const raw: Record<string, unknown> = {};
 
@@ -347,12 +355,19 @@ function readImportedUsage(): {
       if (!deviceDaily.length) continue;
 
       const id = entry.name.replace(/\.json$/i, "");
-      daily.push(...deviceDaily);
+      const metadata = asRecord(report);
+      const filePath = join(directory, entry.name);
+      dailyByDevice[id] = deviceDaily;
       devices.push({
         dailyEntries: deviceDaily.length,
         id,
         kind: "imported",
-        name: deviceNameFromFile(entry.name),
+        latestDate: latestLabel(deviceDaily),
+        name: asString(metadata.deviceName) ?? deviceNameFromFile(entry.name),
+        updatedAt:
+          asString(metadata.exportedAt) ??
+          asString(metadata.generatedAt) ??
+          statSync(filePath).mtime.toISOString(),
       });
       raw[id] = report;
     } catch (error) {
@@ -360,7 +375,7 @@ function readImportedUsage(): {
     }
   }
 
-  return { daily, devices, raw };
+  return { dailyByDevice, devices, raw };
 }
 
 function isoWeekStart(label: string): string {
@@ -416,9 +431,11 @@ export function normalizeDays(days: number): number {
 
 export async function readUsageSnapshot({
   days,
+  device,
   source,
 }: {
   days: number;
+  device: UsageDeviceFilter;
   source: UsageSource;
 }): Promise<UsageSnapshot> {
   const rangeDays = normalizeDays(days);
@@ -433,47 +450,71 @@ export async function readUsageSnapshot({
   const localDaily = periodsFrom(dailyRaw, "daily");
   const localMonthly = periodsFrom(monthlyRaw, "monthly");
   const imported = readImportedUsage();
-  const importedDaily = recentDaily(imported.daily, rangeDays);
-  const daily = mergePeriods(localDaily, importedDaily);
-  const monthly = mergePeriods(localMonthly, monthlyFromDaily(imported.daily));
+  const importedIds = new Set(imported.devices.map((item) => item.id));
+  const deviceFilter =
+    device === "local" || importedIds.has(device) ? device : "all";
+  const includeLocal = deviceFilter === "all" || deviceFilter === "local";
+  const selectedImportedDevices =
+    deviceFilter === "all"
+      ? imported.devices
+      : imported.devices.filter((item) => item.id === deviceFilter);
+  const selectedImportedDaily = selectedImportedDevices.flatMap(
+    (item) => imported.dailyByDevice[item.id] ?? []
+  );
+  const importedDaily = recentDaily(selectedImportedDaily, rangeDays);
+  const daily = mergePeriods(includeLocal ? localDaily : [], importedDaily);
+  const monthly = mergePeriods(
+    includeLocal ? localMonthly : [],
+    monthlyFromDaily(selectedImportedDaily)
+  );
   const weeklyRaw =
-    source === "all"
+    source === "all" && includeLocal
       ? await runCcusage([...namespace, "weekly", ...common, "--last", "12"])
       : { derivedFrom: "ccusage codex daily", weekly: weeklyFromDaily(daily) };
   const weekly =
-    source === "all"
+    source === "all" && includeLocal
       ? mergePeriods(periodsFrom(weeklyRaw, "weekly"), weeklyFromDaily(importedDaily))
       : weeklyFromDaily(daily);
+  const generatedAt = new Date().toISOString();
+  const localDevice: UsageDevice = {
+    dailyEntries: localDaily.length,
+    id: "local",
+    kind: "local",
+    latestDate: latestLabel(localDaily),
+    name: "本机",
+    updatedAt: generatedAt,
+  };
+  const devices = [localDevice, ...imported.devices];
+  const activeDeviceIds = [
+    ...(includeLocal ? [localDevice.id] : []),
+    ...selectedImportedDevices.map((item) => item.id),
+  ];
+  const importedRaw = Object.fromEntries(
+    selectedImportedDevices.map((item) => [item.id, imported.raw[item.id]])
+  );
 
   return {
+    activeDeviceIds,
     daily,
     dataPath: process.env.CODEX_HOME ?? "~/.codex",
-    devices: [
-      {
-        dailyEntries: localDaily.length,
-        id: "local",
-        kind: "local",
-        name: "本机",
-      },
-      ...imported.devices,
-    ],
-    generatedAt: new Date().toISOString(),
+    devices,
+    generatedAt,
     mode: "live",
     models: modelsFrom(daily),
     monthly,
     offline: true,
     raw: {
       daily: dailyRaw,
-      imported: imported.raw,
+      imported: importedRaw,
       monthly: monthlyRaw,
       sessions: sessionsRaw,
       weekly: weeklyRaw,
     },
     reader: "ccusage",
-    sessions: sessionsFrom(sessionsRaw),
+    sessions: includeLocal ? sessionsFrom(sessionsRaw) : [],
     source,
     totals: daily.reduce(addTotals, EMPTY_TOTALS),
     weekly,
-    weeklyMethod: source === "all" ? "ccusage" : "daily-derived",
+    weeklyMethod: source === "all" && includeLocal ? "ccusage" : "daily-derived",
   };
 }

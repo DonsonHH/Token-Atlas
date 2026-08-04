@@ -57,7 +57,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import type { UsageSnapshot, UsageSource, UsageTotals } from "@/lib/usage";
+import type {
+  UsageDeviceFilter,
+  UsageSnapshot,
+  UsageSource,
+  UsageTotals,
+} from "@/lib/usage";
 
 const chartConfig = {
   tokens: {
@@ -210,6 +215,7 @@ function EmptyState({ message }: { message: string }) {
 
 export default function Home() {
   const [days, setDays] = useState("14");
+  const [deviceFilter, setDeviceFilter] = useState<UsageDeviceFilter>("all");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -218,7 +224,8 @@ export default function Home() {
   const [tab, setTab] = useState("overview");
 
   const requestUsage = useCallback(async () => {
-    const response = await fetch(`/api/usage?source=${source}&days=${days}`, {
+    const query = new URLSearchParams({ days, device: deviceFilter, source });
+    const response = await fetch(`/api/usage?${query}`, {
       cache: "no-store",
     });
     const payload = (await response.json()) as UsageSnapshot & { error?: string };
@@ -228,7 +235,7 @@ export default function Home() {
     }
 
     return payload;
-  }, [days, source]);
+  }, [days, deviceFilter, source]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,7 +286,13 @@ export default function Home() {
   const sessions = snapshot?.sessions ?? emptySessions;
   const models = snapshot?.models ?? emptyModels;
   const devices = snapshot?.devices ?? [];
-  const importedDevices = devices.filter((device) => device.kind === "imported");
+  const activeDeviceIds = snapshot?.activeDeviceIds ?? [];
+  const selectedDevices = devices.filter((device) => activeDeviceIds.includes(device.id));
+  const importedDevices = selectedDevices.filter((device) => device.kind === "imported");
+  const selectedDeviceLabel =
+    deviceFilter === "all"
+      ? "综合数据"
+      : devices.find((device) => device.id === deviceFilter)?.name ?? "本机";
 
   const chartData = useMemo(
     () =>
@@ -371,10 +384,12 @@ export default function Home() {
             <span className="size-1.5 rounded-full bg-emerald-500" />
             本地实时数据
           </Badge>
-          {importedDevices.length ? (
+          {selectedDevices.length ? (
             <Badge className="hidden gap-1.5 md:flex" variant="outline">
               <Database className="size-3" />
-              已汇总 {devices.length} 台设备
+              {selectedDevices.length > 1
+                ? `已汇总 ${selectedDevices.length} 台设备`
+                : selectedDevices[0]?.name}
             </Badge>
           ) : null}
           <Button className="h-9 gap-2 px-3" onClick={() => void loadData()} size="sm" variant="outline">
@@ -411,19 +426,40 @@ export default function Home() {
                 </Badge>
                 <Badge variant="secondary">{snapshot?.reader ?? "ccusage"}</Badge>
                 <Badge variant="secondary">{snapshot?.offline ? "--offline" : "本地模式"}</Badge>
-                {importedDevices.length ? (
+                {selectedDevices.length > 1 ? (
                   <Badge className="gap-1" variant="secondary">
                     <Database className="size-3" />
-                    +{importedDevices.length} 台外部设备
+                    综合 {selectedDevices.length} 台设备
                   </Badge>
                 ) : null}
               </div>
               <h2 className="text-3xl font-semibold tracking-[-0.04em]">用量概览</h2>
               <p className="mt-1.5 text-base text-muted-foreground">
-                直接汇总本机 Codex 会话日志；金额为 ccusage 的本地估算值。
+                {importedDevices.length
+                  ? "汇总本机日志与外部设备的 ccusage JSON；金额为本地估算值。"
+                  : "直接汇总本机 Codex 会话日志；金额为 ccusage 的本地估算值。"}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
+              <Select
+                onValueChange={(value) => value && setDeviceFilter(value as UsageDeviceFilter)}
+                value={deviceFilter}
+              >
+                <SelectTrigger className="h-10 w-full bg-background sm:w-56">
+                  <span>{selectedDeviceLabel}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">综合数据</SelectItem>
+                  <SelectItem value="local">本机数据</SelectItem>
+                  {devices
+                    .filter((device) => device.kind === "imported")
+                    .map((device) => (
+                      <SelectItem key={device.id} value={device.id}>
+                        {device.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <Select
                 onValueChange={(value) => value && setSource(value as UsageSource)}
                 value={source}
@@ -462,7 +498,7 @@ export default function Home() {
               <TabsContent className="space-y-8" value="overview">
                 <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard
-                    detail={`最近 ${days} 天 · ${daily.length} 个活跃日${devices.length > 1 ? ` · ${devices.length} 台设备` : ""}`}
+                    detail={`最近 ${days} 天 · ${daily.length} 个活跃日${selectedDevices.length > 1 ? ` · ${selectedDevices.length} 台设备` : ""}`}
                     icon={Activity}
                     label="总 token"
                     tone="blue"
@@ -594,7 +630,11 @@ export default function Home() {
                   <Card className="bg-background/90 shadow-sm">
                     <CardHeader className="pt-5">
                       <CardTitle className="text-lg">数据来源</CardTitle>
-                      <CardDescription className="mt-1.5 text-sm">每次刷新均重新运行本地 ccusage。</CardDescription>
+                      <CardDescription className="mt-1.5 text-sm">
+                        {importedDevices.length
+                          ? "本机日志实时解析；外部设备从同步 JSON 汇总。"
+                          : "每次刷新均重新运行本地 ccusage。"}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
                       <div className="flex items-center justify-between gap-4">
@@ -618,18 +658,33 @@ export default function Home() {
                           {snapshot.dataPath}
                         </span>
                       </div>
-                      {devices.length > 1 ? (
+                      {selectedDevices.length ? (
                         <>
                           <Separator />
-                          <div className="space-y-2">
-                            <span className="text-muted-foreground">已汇总设备</span>
-                            <div className="flex flex-wrap gap-2">
-                              {devices.map((device) => (
-                                <Badge key={device.id} variant={device.kind === "local" ? "secondary" : "outline"}>
-                                  {device.kind === "local" ? "本机" : "导入"} · {device.name}
-                                </Badge>
-                              ))}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-muted-foreground">当前统计设备</span>
+                              <Badge variant="outline">{selectedDeviceLabel}</Badge>
                             </div>
+                            {selectedDevices.map((device) => (
+                              <div className="rounded-xl border bg-muted/20 p-3" key={device.id}>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-medium">{device.name}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {device.kind === "local" ? "本机实时解析" : "外部汇总导入"} · {device.dailyEntries} 个活跃日
+                                    </p>
+                                  </div>
+                                  <Badge variant={device.kind === "local" ? "secondary" : "outline"}>
+                                    {device.kind === "local" ? "本机" : "导入"}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                  <span>数据更新：{formatDate(device.updatedAt)}</span>
+                                  <span>最新用量：{device.latestDate ?? "暂无"}</span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </>
                       ) : null}
@@ -647,7 +702,9 @@ export default function Home() {
                           <Check className="size-4" />
                         </div>
                         <div>
-                          <p className="font-medium">真实本地日志已加载</p>
+                          <p className="font-medium">
+                            {importedDevices.length ? "真实设备数据已汇总" : "真实本地日志已加载"}
+                          </p>
                           <p className="mt-0.5 text-xs opacity-80">
                             最近刷新：{formatDate(snapshot.generatedAt)}
                           </p>

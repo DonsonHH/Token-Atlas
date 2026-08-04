@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { normalizeDays, readUsageSnapshot, type UsageSource } from "@/lib/usage";
+import {
+  normalizeDays,
+  readUsageSnapshot,
+  type UsageDeviceFilter,
+  type UsageSource,
+} from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,9 +15,10 @@ export async function GET(request: NextRequest) {
   const source: UsageSource =
     searchParams.get("source") === "all" ? "all" : "codex";
   const days = normalizeDays(Number(searchParams.get("days")));
+  const device: UsageDeviceFilter = searchParams.get("device") ?? "all";
 
   try {
-    const snapshot = await readUsageSnapshot({ days, source });
+    const snapshot = await readUsageSnapshot({ days, device, source });
     return NextResponse.json(snapshot, {
       headers: { "Cache-Control": "no-store" },
     });
