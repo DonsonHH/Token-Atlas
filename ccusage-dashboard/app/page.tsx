@@ -91,13 +91,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type {
   UsageDeviceFilter,
   UsageSnapshot,
@@ -108,7 +109,15 @@ import type {
 const chartConfig = {
   tokens: {
     color: "var(--chart-1)",
-    label: "Token",
+    label: "总 token",
+  },
+  inputOutput: {
+    color: "var(--chart-2)",
+    label: "输入与输出",
+  },
+  cacheRead: {
+    color: "var(--chart-3)",
+    label: "缓存读取",
   },
 } satisfies ChartConfig;
 
@@ -289,6 +298,7 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<UsageSnapshot | null>(null);
   const [source, setSource] = useState<UsageSource>("codex");
   const [tab, setTab] = useState("overview");
+  const [chartMetric, setChartMetric] = useState<keyof typeof chartConfig>("tokens");
 
   const requestUsage = useCallback(async () => {
     const query = new URLSearchParams({ days, device: deviceFilter, source });
@@ -364,7 +374,9 @@ export default function Home() {
   const chartData = useMemo(
     () =>
       daily.map((item) => ({
+        cacheRead: Number((item.cacheReadTokens / 1_000_000).toFixed(2)),
         date: item.label,
+        inputOutput: Number(((item.inputTokens + item.outputTokens) / 1_000_000).toFixed(2)),
         label: formatShortDate(item.label),
         tokens: Number((item.totalTokens / 1_000_000).toFixed(2)),
       })),
@@ -521,6 +533,7 @@ export default function Home() {
                 : selectedDevices[0]?.name}
             </Badge>
           ) : null}
+          <ThemeToggle />
           <Button className="h-9 gap-2 px-3" onClick={() => void loadData()} size="sm" variant="outline">
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">刷新</span>
@@ -718,7 +731,24 @@ export default function Home() {
                           <CardTitle className="text-lg">每日 token 趋势</CardTitle>
                           <CardDescription className="mt-1.5 text-sm">最近 {days} 天的真实日志汇总</CardDescription>
                         </div>
-                        <Badge variant="outline">单位：百万 token</Badge>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <Tabs
+                            className="contents"
+                            onValueChange={(value) => {
+                              if (value in chartConfig) {
+                                setChartMetric(value as keyof typeof chartConfig);
+                              }
+                            }}
+                            value={chartMetric}
+                          >
+                            <TabsList className="h-9 gap-0.5 rounded-lg border bg-muted/50 p-1">
+                              <TabsTrigger className="px-2.5 text-xs" value="tokens">总量</TabsTrigger>
+                              <TabsTrigger className="px-2.5 text-xs" value="inputOutput">输入输出</TabsTrigger>
+                              <TabsTrigger className="px-2.5 text-xs" value="cacheRead">缓存</TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                          <Badge variant="outline">单位：百万 token</Badge>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -726,9 +756,9 @@ export default function Home() {
                         <ChartContainer className="h-[350px] w-full" config={chartConfig}>
                           <AreaChart accessibilityLayer data={chartData} margin={{ left: -18, right: 8, top: 8 }}>
                             <defs>
-                              <linearGradient id="fillTokens" x1="0" x2="0" y1="0" y2="1">
-                                <stop offset="5%" stopColor="var(--color-tokens)" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="var(--color-tokens)" stopOpacity={0.02} />
+                              <linearGradient id="fillUsageMetric" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="5%" stopColor={`var(--color-${chartMetric})`} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={`var(--color-${chartMetric})`} stopOpacity={0.02} />
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -748,16 +778,16 @@ export default function Home() {
                             <ChartTooltip
                               content={
                                 <ChartTooltipContent
-                                  formatter={(value) => `${Number(value).toFixed(2)}M token`}
+                                  formatter={(value) => `${Number(value).toFixed(2)}M ${chartConfig[chartMetric].label}`}
                                   labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
                                 />
                               }
                             />
                             <Area
-                              dataKey="tokens"
-                              fill="url(#fillTokens)"
+                              dataKey={chartMetric}
+                              fill="url(#fillUsageMetric)"
                               fillOpacity={1}
-                              stroke="var(--color-tokens)"
+                              stroke={`var(--color-${chartMetric})`}
                               strokeWidth={2}
                               type="monotone"
                             />
