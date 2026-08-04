@@ -99,12 +99,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UsageInsights } from "@/components/usage/usage-insights";
 import type {
   UsageDeviceFilter,
   UsageSnapshot,
   UsageSource,
   UsageTotals,
 } from "@/lib/usage";
+import {
+  formatCost,
+  formatDate,
+  formatProject,
+  formatShortDate,
+  formatTokens,
+} from "@/lib/format";
 
 const chartConfig = {
   tokens: {
@@ -157,46 +165,6 @@ const navigation = [
 ] as const;
 
 const navigationGroups = ["工作台", "数据明细"] as const;
-
-function formatTokens(value: number, digits = 1) {
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(digits)}B`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(digits)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(digits)}K`;
-  return value.toLocaleString("zh-CN");
-}
-
-function formatCost(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-    style: "currency",
-  }).format(value);
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "暂无活动记录";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-  }).format(date);
-}
-
-function formatShortDate(value: string) {
-  const pieces = value.split("-");
-  return pieces.length === 3 ? `${Number(pieces[1])}/${Number(pieces[2])}` : value;
-}
-
-function formatProject(value: string | null) {
-  if (!value) return "未归类";
-  const parts = value.split(/[\\/]/).filter(Boolean);
-  return parts.at(-1) ?? value;
-}
 
 function StatCard({
   detail,
@@ -888,6 +856,8 @@ export default function Home() {
                     </CardContent>
                   </Card>
                 </section>
+
+                <UsageInsights daily={daily} sessions={sessions} />
 
                 <section className="grid gap-7 xl:grid-cols-2">
                   <Card className="bg-background/90 shadow-sm">
