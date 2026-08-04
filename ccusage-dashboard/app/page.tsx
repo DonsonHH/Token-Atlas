@@ -24,7 +24,7 @@ import {
   Table2,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -103,12 +103,18 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SessionAnalytics } from "@/components/usage/session-analytics";
 import { TrendAnalytics } from "@/components/usage/trend-analytics";
 import { UsageInsights } from "@/components/usage/usage-insights";
+import { useUsageSnapshot } from "@/hooks/use-usage-snapshot";
+import { downloadJsonFile } from "@/lib/download";
 import type {
   UsageDeviceFilter,
   UsageSnapshot,
   UsageSource,
   UsageTotals,
 } from "@/lib/usage";
+import {
+  buildUsageViewExport,
+  usageExportFileName,
+} from "@/lib/usage-export";
 import {
   formatCost,
   formatDate,
@@ -282,70 +288,16 @@ function EmptyState({ message }: { message: string }) {
 export default function Home() {
   const [days, setDays] = useState("14");
   const [deviceFilter, setDeviceFilter] = useState<UsageDeviceFilter>("all");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [snapshot, setSnapshot] = useState<UsageSnapshot | null>(null);
   const [source, setSource] = useState<UsageSource>("codex");
   const [tab, setTab] = useState("overview");
   const [chartMetric, setChartMetric] = useState<keyof typeof chartConfig>("tokens");
+  const { error, loading, refresh, snapshot } = useUsageSnapshot({
+    days,
+    device: deviceFilter,
+    source,
+  });
   const activeTabCopy = tabCopy[tab as keyof typeof tabCopy] ?? tabCopy.overview;
-
-  const requestUsage = useCallback(async () => {
-    const query = new URLSearchParams({ days, device: deviceFilter, source });
-    const response = await fetch(`/api/usage?${query}`, {
-      cache: "no-store",
-    });
-    const payload = (await response.json()) as UsageSnapshot & { error?: string };
-
-    if (!response.ok) {
-      throw new Error(payload.error ?? "读取数据失败。");
-    }
-
-    return payload;
-  }, [days, deviceFilter, source]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadInitialUsage() {
-      try {
-        const payload = await requestUsage();
-        if (!cancelled) {
-          setSnapshot(payload);
-          setError(null);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setSnapshot(null);
-          setError(loadError instanceof Error ? loadError.message : "读取数据失败。");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadInitialUsage();
-    return () => {
-      cancelled = true;
-    };
-  }, [requestUsage]);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await requestUsage();
-      setSnapshot(payload);
-      setError(null);
-    } catch (loadError) {
-      setSnapshot(null);
-      setError(loadError instanceof Error ? loadError.message : "读取数据失败。");
-    } finally {
-      setLoading(false);
-    }
-  }, [requestUsage]);
 
   const totals = snapshot?.totals ?? emptyTotals;
   const daily = snapshot?.daily ?? emptyPeriods;
@@ -406,26 +358,11 @@ export default function Home() {
     .sort()
     .at(-1);
 
-  function downloadJson(filename: string, payload: unknown) {
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.style.display = "none";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
-
   function downloadRawData() {
     if (!snapshot) return;
 
-    downloadJson(
-      `ccusage-${source}-${snapshot.generatedAt.slice(0, 10)}.json`,
+    downloadJsonFile(
+      usageExportFileName("ccusage", source, snapshot.generatedAt),
       snapshot.raw
     );
   }
@@ -433,20 +370,9 @@ export default function Home() {
   function downloadCurrentView() {
     if (!snapshot) return;
 
-    const report = {
-      activeDeviceIds: snapshot.activeDeviceIds,
-      daily,
-      devices: selectedDevices,
-      generatedAt: snapshot.generatedAt,
-      models,
-      monthly,
-      source,
-      totals,
-      weekly,
-    };
-    downloadJson(
-      `usage-view-${deviceFilter}-${snapshot.generatedAt.slice(0, 10)}.json`,
-      report
+    downloadJsonFile(
+      usageExportFileName("usage-view", deviceFilter, snapshot.generatedAt),
+      buildUsageViewExport(snapshot, source)
     );
   }
 
@@ -530,7 +456,7 @@ export default function Home() {
             </Badge>
           ) : null}
           <ThemeToggle />
-          <Button className="h-9 gap-2 px-3" onClick={() => void loadData()} size="sm" variant="outline">
+          <Button className="h-9 gap-2 px-3" onClick={() => void refresh()} size="sm" variant="outline">
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">刷新</span>
           </Button>
@@ -683,7 +609,18 @@ export default function Home() {
           </div>
 
           {loading ? <DashboardSkeleton /> : null}
-          {!loading && error ? <EmptyState message={error} /> : null}
+          {!loading && error && !snapshot ? <EmptyState message={error} /> : null}
+          {!loading && error && snapshot ? (
+            <div
+              className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"
+              role="alert"
+            >
+              <CircleAlert className="mt-0.5 size-4 shrink-0" />
+              <p>
+                {error} 正在保留并展示上一次成功读取的数据；可在确认本机日志或导入文件后重试。
+              </p>
+            </div>
+          ) : null}
 
           {!loading && snapshot ? (
             <Tabs className="space-y-8" onValueChange={setTab} value={tab}>

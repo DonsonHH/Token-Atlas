@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "noEmit": false,
+    "outDir": ".test-build",
+    "rootDir": ".",
+    "types": ["node"],
+    "verbatimModuleSyntax": false
+  },
+  "include": [
+    "lib/usage-domain.ts",
+    "lib/usage-export.ts",
+    "lib/usage-types.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", ".test-build"]
+}

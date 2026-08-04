@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   verify:
-    name: Lint and build
+    name: Lint, typecheck, test, and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,6 +35,12 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
 
       - name: Build
         run: pnpm build
