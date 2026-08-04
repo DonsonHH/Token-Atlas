@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -9,6 +9,13 @@ const MAX_BUFFER = 24 * 1024 * 1024;
 const SUPPORTED_DAYS = new Set([7, 14, 30, 90]);
 
 export type UsageSource = "codex" | "all";
+
+export type UsageDevice = {
+  dailyEntries: number;
+  id: string;
+  kind: "imported" | "local";
+  name: string;
+};
 
 export type UsageTotals = {
   cacheCreationTokens: number;
@@ -40,6 +47,7 @@ export type UsageModel = UsageTotals & {
 export type UsageSnapshot = {
   daily: UsagePeriod[];
   dataPath: string;
+  devices: UsageDevice[];
   generatedAt: string;
   mode: "live";
   models: UsageModel[];
@@ -241,15 +249,6 @@ function modelsFrom(periods: UsagePeriod[]): UsageModel[] {
   );
 }
 
-function totalFor(report: unknown, fallback: UsagePeriod[]): UsageTotals {
-  const total = totalsFrom(asRecord(report).totals);
-  if (total.totalTokens > 0) {
-    return total;
-  }
-
-  return fallback.reduce(addTotals, EMPTY_TOTALS);
-}
-
 function addModelMaps(
   left: UsagePeriod["models"],
   right: UsagePeriod["models"]
@@ -265,6 +264,103 @@ function addModelMaps(
   }
 
   return combined;
+}
+
+function mergePeriods(...groups: UsagePeriod[][]): UsagePeriod[] {
+  const periods = new Map<string, UsagePeriod>();
+
+  for (const group of groups) {
+    for (const period of group) {
+      const previous = periods.get(period.label);
+      periods.set(
+        period.label,
+        previous
+          ? {
+              ...addTotals(previous, period),
+              label: period.label,
+              models: addModelMaps(previous.models, period.models),
+            }
+          : { ...period, models: { ...period.models } }
+      );
+    }
+  }
+
+  return [...periods.values()].sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
+}
+
+function recentDaily(daily: UsagePeriod[], days: number): UsagePeriod[] {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - days + 1);
+  const cutoff = date.toISOString().slice(0, 10);
+
+  return daily.filter((period) => period.label >= cutoff);
+}
+
+function monthlyFromDaily(daily: UsagePeriod[]): UsagePeriod[] {
+  const periods = new Map<string, UsagePeriod>();
+
+  for (const day of daily) {
+    const label = day.label.slice(0, 7);
+    const previous = periods.get(label);
+    periods.set(label, {
+      ...(previous ? addTotals(previous, day) : day),
+      label,
+      models: previous ? addModelMaps(previous.models, day.models) : day.models,
+    });
+  }
+
+  return [...periods.values()].sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
+}
+
+function deviceNameFromFile(fileName: string): string {
+  const stem = fileName.replace(/\.json$/i, "").replace(/[-_]+/g, " ");
+  return stem.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function readImportedUsage(): {
+  daily: UsagePeriod[];
+  devices: UsageDevice[];
+  raw: Record<string, unknown>;
+} {
+  const directory = join(process.cwd(), "data", "devices");
+  if (!existsSync(directory)) {
+    return { daily: [], devices: [], raw: {} };
+  }
+
+  const daily: UsagePeriod[] = [];
+  const devices: UsageDevice[] = [];
+  const raw: Record<string, unknown> = {};
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+
+    try {
+      const report = JSON.parse(
+        readFileSync(join(directory, entry.name), "utf8")
+      ) as unknown;
+      const deviceDaily = periodsFrom(report, "daily");
+      if (!deviceDaily.length) continue;
+
+      const id = entry.name.replace(/\.json$/i, "");
+      daily.push(...deviceDaily);
+      devices.push({
+        dailyEntries: deviceDaily.length,
+        id,
+        kind: "imported",
+        name: deviceNameFromFile(entry.name),
+      });
+      raw[id] = report;
+    } catch (error) {
+      console.warn(`Skipping invalid usage import: ${entry.name}`, error);
+    }
+  }
+
+  return { daily, devices, raw };
 }
 
 function isoWeekStart(label: string): string {
@@ -334,18 +430,33 @@ export async function readUsageSnapshot({
     runCcusage([...namespace, "session", ...common]),
   ]);
 
-  const daily = periodsFrom(dailyRaw, "daily");
-  const monthly = periodsFrom(monthlyRaw, "monthly");
+  const localDaily = periodsFrom(dailyRaw, "daily");
+  const localMonthly = periodsFrom(monthlyRaw, "monthly");
+  const imported = readImportedUsage();
+  const importedDaily = recentDaily(imported.daily, rangeDays);
+  const daily = mergePeriods(localDaily, importedDaily);
+  const monthly = mergePeriods(localMonthly, monthlyFromDaily(imported.daily));
   const weeklyRaw =
     source === "all"
       ? await runCcusage([...namespace, "weekly", ...common, "--last", "12"])
       : { derivedFrom: "ccusage codex daily", weekly: weeklyFromDaily(daily) };
   const weekly =
-    source === "all" ? periodsFrom(weeklyRaw, "weekly") : weeklyFromDaily(daily);
+    source === "all"
+      ? mergePeriods(periodsFrom(weeklyRaw, "weekly"), weeklyFromDaily(importedDaily))
+      : weeklyFromDaily(daily);
 
   return {
     daily,
     dataPath: process.env.CODEX_HOME ?? "~/.codex",
+    devices: [
+      {
+        dailyEntries: localDaily.length,
+        id: "local",
+        kind: "local",
+        name: "本机",
+      },
+      ...imported.devices,
+    ],
     generatedAt: new Date().toISOString(),
     mode: "live",
     models: modelsFrom(daily),
@@ -353,6 +464,7 @@ export async function readUsageSnapshot({
     offline: true,
     raw: {
       daily: dailyRaw,
+      imported: imported.raw,
       monthly: monthlyRaw,
       sessions: sessionsRaw,
       weekly: weeklyRaw,
@@ -360,7 +472,7 @@ export async function readUsageSnapshot({
     reader: "ccusage",
     sessions: sessionsFrom(sessionsRaw),
     source,
-    totals: totalFor(dailyRaw, daily),
+    totals: daily.reduce(addTotals, EMPTY_TOTALS),
     weekly,
     weeklyMethod: source === "all" ? "ccusage" : "daily-derived",
   };

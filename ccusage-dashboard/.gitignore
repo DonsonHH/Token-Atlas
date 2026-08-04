@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# External device exports contain personal usage data and stay local.
+/data/devices/*.json

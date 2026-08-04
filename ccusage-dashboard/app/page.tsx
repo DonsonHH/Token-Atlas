@@ -278,6 +278,8 @@ export default function Home() {
   const monthly = snapshot?.monthly ?? emptyPeriods;
   const sessions = snapshot?.sessions ?? emptySessions;
   const models = snapshot?.models ?? emptyModels;
+  const devices = snapshot?.devices ?? [];
+  const importedDevices = devices.filter((device) => device.kind === "imported");
 
   const chartData = useMemo(
     () =>
@@ -369,6 +371,12 @@ export default function Home() {
             <span className="size-1.5 rounded-full bg-emerald-500" />
             本地实时数据
           </Badge>
+          {importedDevices.length ? (
+            <Badge className="hidden gap-1.5 md:flex" variant="outline">
+              <Database className="size-3" />
+              已汇总 {devices.length} 台设备
+            </Badge>
+          ) : null}
           <Button className="h-9 gap-2 px-3" onClick={() => void loadData()} size="sm" variant="outline">
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">刷新</span>
@@ -403,6 +411,12 @@ export default function Home() {
                 </Badge>
                 <Badge variant="secondary">{snapshot?.reader ?? "ccusage"}</Badge>
                 <Badge variant="secondary">{snapshot?.offline ? "--offline" : "本地模式"}</Badge>
+                {importedDevices.length ? (
+                  <Badge className="gap-1" variant="secondary">
+                    <Database className="size-3" />
+                    +{importedDevices.length} 台外部设备
+                  </Badge>
+                ) : null}
               </div>
               <h2 className="text-3xl font-semibold tracking-[-0.04em]">用量概览</h2>
               <p className="mt-1.5 text-base text-muted-foreground">
@@ -448,7 +462,7 @@ export default function Home() {
               <TabsContent className="space-y-8" value="overview">
                 <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard
-                    detail={`最近 ${days} 天 · ${daily.length} 个活跃日`}
+                    detail={`最近 ${days} 天 · ${daily.length} 个活跃日${devices.length > 1 ? ` · ${devices.length} 台设备` : ""}`}
                     icon={Activity}
                     label="总 token"
                     tone="blue"
@@ -604,6 +618,21 @@ export default function Home() {
                           {snapshot.dataPath}
                         </span>
                       </div>
+                      {devices.length > 1 ? (
+                        <>
+                          <Separator />
+                          <div className="space-y-2">
+                            <span className="text-muted-foreground">已汇总设备</span>
+                            <div className="flex flex-wrap gap-2">
+                              {devices.map((device) => (
+                                <Badge key={device.id} variant={device.kind === "local" ? "secondary" : "outline"}>
+                                  {device.kind === "local" ? "本机" : "导入"} · {device.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : null}
                     </CardContent>
                   </Card>
 
@@ -660,7 +689,7 @@ export default function Home() {
                   <CardHeader className="flex flex-row items-start justify-between gap-4">
                     <div>
                       <CardTitle>会话记录</CardTitle>
-                      <CardDescription className="mt-1">按最后活动时间倒序，展示最近 10 条真实记录。</CardDescription>
+                      <CardDescription className="mt-1">按最后活动时间倒序，展示最近 10 条本机真实记录；外部设备仅导入汇总用量。</CardDescription>
                     </div>
                     <Badge variant="outline">{sessions.length} 条</Badge>
                   </CardHeader>
