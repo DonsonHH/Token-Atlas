@@ -6,9 +6,15 @@ import { cn } from "@/lib/utils"
 
 function Progress({
   className,
+  indicatorClassName,
+  indicatorStyle,
   value,
   ...props
-}: ProgressPrimitive.Root.Props & { className?: string }) {
+}: ProgressPrimitive.Root.Props & {
+  className?: string
+  indicatorClassName?: string
+  indicatorStyle?: React.CSSProperties
+}) {
   const percentage = Math.max(0, Math.min(100, value ?? 0))
 
   return (
@@ -20,8 +26,11 @@ function Progress({
     >
       <ProgressPrimitive.Track className="block h-full overflow-hidden">
         <ProgressPrimitive.Indicator
-          className="block h-full rounded-full bg-primary transition-[width] duration-500"
-          style={{ width: `${percentage}%` }}
+          className={cn(
+            "block h-full rounded-full bg-primary transition-[width] duration-500",
+            indicatorClassName
+          )}
+          style={{ ...indicatorStyle, width: `${percentage}%` }}
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>

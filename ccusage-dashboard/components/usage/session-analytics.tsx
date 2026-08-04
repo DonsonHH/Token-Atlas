@@ -133,7 +133,7 @@ function SessionAnalytics({ sessions }: { sessions: UsageSnapshot["sessions"] })
                 accessibilityLayer
                 data={sourceData}
                 layout="vertical"
-                margin={{ bottom: 0, left: -16, right: 20, top: 2 }}
+                margin={{ bottom: 0, left: 8, right: 20, top: 6 }}
               >
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                 <XAxis
@@ -150,7 +150,7 @@ function SessionAnalytics({ sessions }: { sessions: UsageSnapshot["sessions"] })
                   tickFormatter={(value) =>
                     String(value).length > 12 ? `${String(value).slice(0, 12)}…` : value
                   }
-                  width={112}
+                  width={118}
                 />
                 <ChartTooltip
                   content={
@@ -199,7 +199,11 @@ function SessionAnalytics({ sessions }: { sessions: UsageSnapshot["sessions"] })
         </CardHeader>
         <CardContent className="space-y-5">
           <ChartContainer className="h-[250px] w-full" config={activityChartConfig}>
-            <BarChart accessibilityLayer data={activityData} margin={{ bottom: 0, left: -12, right: 0, top: 4 }}>
+            <BarChart
+              accessibilityLayer
+              data={activityData}
+              margin={{ bottom: 0, left: 6, right: 8, top: 8 }}
+            >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis
                 axisLine={false}
@@ -208,7 +212,7 @@ function SessionAnalytics({ sessions }: { sessions: UsageSnapshot["sessions"] })
                 tickLine={false}
                 tickMargin={8}
               />
-              <YAxis axisLine={false} allowDecimals={false} tickLine={false} width={32} />
+              <YAxis axisLine={false} allowDecimals={false} tickLine={false} width={36} />
               <ChartTooltip
                 content={
                   <ChartTooltipContent

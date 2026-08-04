@@ -181,7 +181,7 @@ function UsageInsights({
                 <AreaChart
                   accessibilityLayer
                   data={compositionData}
-                  margin={{ bottom: 0, left: 0, right: 8, top: 8 }}
+                  margin={{ bottom: 0, left: 8, right: 12, top: 12 }}
                   stackOffset="expand"
                 >
                   <defs>
@@ -205,7 +205,7 @@ function UsageInsights({
                     domain={[0, 1]}
                     tickFormatter={(value) => `${Math.round(Number(value) * 100)}%`}
                     tickLine={false}
-                    width={48}
+                    width={52}
                   />
                   <ChartTooltip
                     content={
@@ -253,7 +253,11 @@ function UsageInsights({
           <CardContent className="space-y-4">
             {costData.length ? (
               <ChartContainer className="h-[205px] w-full" config={costChartConfig}>
-                <BarChart accessibilityLayer data={costData} margin={{ bottom: 0, left: -10, right: 0, top: 4 }}>
+                <BarChart
+                  accessibilityLayer
+                  data={costData}
+                  margin={{ bottom: 0, left: 8, right: 8, top: 8 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     axisLine={false}
@@ -266,7 +270,7 @@ function UsageInsights({
                     axisLine={false}
                     tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
                     tickLine={false}
-                    width={42}
+                    width={52}
                   />
                   <ChartTooltip
                     content={
@@ -319,7 +323,7 @@ function UsageInsights({
                   accessibilityLayer
                   data={sessionData}
                   layout="vertical"
-                  margin={{ bottom: 0, left: -16, right: 20, top: 2 }}
+                  margin={{ bottom: 0, left: 8, right: 20, top: 6 }}
                 >
                   <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                   <XAxis
@@ -333,7 +337,7 @@ function UsageInsights({
                     dataKey="label"
                     tickLine={false}
                     type="category"
-                    width={30}
+                    width={38}
                   />
                   <ChartTooltip
                     content={

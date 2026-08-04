@@ -746,7 +746,11 @@ export default function Home() {
                     <CardContent>
                       {chartData.length ? (
                         <ChartContainer className="h-[350px] w-full" config={chartConfig}>
-                          <AreaChart accessibilityLayer data={chartData} margin={{ left: -18, right: 8, top: 8 }}>
+                          <AreaChart
+                            accessibilityLayer
+                            data={chartData}
+                            margin={{ bottom: 0, left: 8, right: 12, top: 12 }}
+                          >
                             <defs>
                               <linearGradient id="fillUsageMetric" x1="0" x2="0" y1="0" y2="1">
                                 <stop offset="5%" stopColor={`var(--color-${chartMetric})`} stopOpacity={0.3} />
@@ -765,7 +769,7 @@ export default function Home() {
                               axisLine={false}
                               tickFormatter={(value) => `${value}M`}
                               tickLine={false}
-                              width={48}
+                              width={56}
                             />
                             <ChartTooltip
                               content={
@@ -860,15 +864,11 @@ export default function Home() {
                                   {share.toFixed(1)}%
                                 </span>
                               </div>
-                              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full transition-[width]"
-                                  style={{
-                                    backgroundColor: modelColors[index % modelColors.length],
-                                    width: `${Math.max(share, 1)}%`,
-                                  }}
-                                />
-                              </div>
+                              <Progress
+                                aria-label={`${model.name} token 占比`}
+                                indicatorStyle={{ backgroundColor: modelColors[index % modelColors.length] }}
+                                value={Math.max(share, 1)}
+                              />
                             </div>
                           );
                             })}
@@ -988,7 +988,7 @@ export default function Home() {
                             <Badge className="text-[10px]" variant="outline">百万 token</Badge>
                           </div>
                           <ChartContainer className="h-28 w-full" config={chartConfig}>
-                            <BarChart data={weeklyChartData} margin={{ bottom: 0, left: -18, right: 0, top: 4 }}>
+                            <BarChart data={weeklyChartData} margin={{ bottom: 0, left: 0, right: 4, top: 6 }}>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} />
                               <XAxis
                                 axisLine={false}

@@ -1,8 +1,8 @@
 "use client"
 
-import { Activity, TrendingUp } from "lucide-react"
+import { Activity, CalendarDays, TrendingUp } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -42,6 +42,13 @@ const cacheChartConfig = {
   },
 } satisfies ChartConfig
 
+const weekdayChartConfig = {
+  tokens: {
+    color: "var(--chart-5)",
+    label: "总 token",
+  },
+} satisfies ChartConfig
+
 type Granularity = "daily" | "monthly" | "weekly"
 
 const granularityLabel: Record<Granularity, string> = {
@@ -49,6 +56,8 @@ const granularityLabel: Record<Granularity, string> = {
   monthly: "每月",
   weekly: "每周",
 }
+
+const weekdayLabels = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 function formatPeriodLabel(value: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatShortDate(value)
@@ -112,10 +121,45 @@ function TrendAnalytics({
       trendData.length
     : 0
   const totalCost = trendData.reduce((sum, period) => sum + period.cost, 0)
+  const weekdayData = useMemo(() => {
+    const buckets = weekdayLabels.map((label) => ({
+      activeDays: 0,
+      label,
+      totalTokens: 0,
+    }))
+
+    for (const period of daily) {
+      const date = new Date(`${period.label}T12:00:00`)
+      if (Number.isNaN(date.getTime())) continue
+
+      const weekdayIndex = (date.getDay() + 6) % 7
+      buckets[weekdayIndex].activeDays += 1
+      buckets[weekdayIndex].totalTokens += period.totalTokens
+    }
+
+    return buckets.map((bucket) => ({
+      ...bucket,
+      tokens: Number((bucket.totalTokens / 1_000_000).toFixed(2)),
+    }))
+  }, [daily])
+  const weekdayPeak = weekdayData.reduce<(typeof weekdayData)[number] | null>(
+    (current, weekday) =>
+      !current || weekday.totalTokens > current.totalTokens ? weekday : current,
+    null
+  )
+  const weekdayAverage = daily.length
+    ? daily.reduce((sum, period) => sum + period.totalTokens, 0) / daily.length
+    : 0
+  const weekendShare = weekdayData.reduce(
+    (sum, weekday, index) => sum + (index >= 5 ? weekday.totalTokens : 0),
+    0
+  )
+  const weekdayTotal = weekdayData.reduce((sum, weekday) => sum + weekday.totalTokens, 0)
 
   return (
-    <section className="grid gap-7 2xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.85fr)]">
-      <Card className="bg-background/90 shadow-sm">
+    <div className="space-y-7">
+      <section className="grid gap-7 2xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.85fr)]">
+        <Card className="bg-background/90 shadow-sm">
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 pt-5">
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -147,7 +191,11 @@ function TrendAnalytics({
         <CardContent>
           {trendData.length ? (
             <ChartContainer className="h-[330px] w-full" config={trendChartConfig}>
-              <AreaChart accessibilityLayer data={trendData} margin={{ bottom: 0, left: -18, right: 8, top: 8 }}>
+              <AreaChart
+                accessibilityLayer
+                data={trendData}
+                margin={{ bottom: 0, left: 8, right: 12, top: 12 }}
+              >
                 <defs>
                   <linearGradient id="fill-trend-tokens" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="5%" stopColor="var(--color-tokens)" stopOpacity={0.36} />
@@ -166,7 +214,7 @@ function TrendAnalytics({
                   axisLine={false}
                   tickFormatter={(value) => `${Number(value).toFixed(0)}M`}
                   tickLine={false}
-                  width={48}
+                  width={56}
                 />
                 <ChartTooltip
                   content={
@@ -202,9 +250,9 @@ function TrendAnalytics({
             </div>
           )}
         </CardContent>
-      </Card>
+        </Card>
 
-      <Card className="bg-background/90 shadow-sm">
+        <Card className="bg-background/90 shadow-sm">
         <CardHeader className="flex flex-row items-start justify-between gap-4 pt-5">
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -218,7 +266,11 @@ function TrendAnalytics({
         <CardContent className="space-y-5">
           {trendData.length ? (
             <ChartContainer className="h-[205px] w-full" config={cacheChartConfig}>
-              <AreaChart accessibilityLayer data={trendData} margin={{ bottom: 0, left: -10, right: 0, top: 8 }}>
+              <AreaChart
+                accessibilityLayer
+                data={trendData}
+                margin={{ bottom: 0, left: 8, right: 8, top: 10 }}
+              >
                 <defs>
                   <linearGradient id="fill-cache-rate" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="5%" stopColor="var(--color-cacheRate)" stopOpacity={0.34} />
@@ -238,7 +290,7 @@ function TrendAnalytics({
                   domain={[0, 100]}
                   tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
                   tickLine={false}
-                  width={42}
+                  width={50}
                 />
                 <ChartTooltip
                   content={
@@ -279,8 +331,78 @@ function TrendAnalytics({
             <p className="mt-1 text-xs text-muted-foreground">{peakPeriod?.date ?? "暂无记录"}</p>
           </div>
         </CardContent>
+        </Card>
+      </section>
+
+      <Card className="bg-background/90 shadow-sm">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 pt-5">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CalendarDays className="size-4 text-muted-foreground" />
+              工作日用量分布
+            </CardTitle>
+            <CardDescription className="mt-1.5 text-sm">
+              将当前筛选中的每日真实日志按星期聚合，帮助发现固定的高负荷工作日。
+            </CardDescription>
+          </div>
+          <Badge variant="outline">{daily.length} 个样本日</Badge>
+        </CardHeader>
+        <CardContent className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_15rem]">
+          <ChartContainer className="h-[230px] w-full" config={weekdayChartConfig}>
+            <BarChart
+              accessibilityLayer
+              data={weekdayData}
+              margin={{ bottom: 0, left: 8, right: 12, top: 10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
+              <YAxis
+                axisLine={false}
+                tickFormatter={(value) => `${Number(value).toFixed(0)}M`}
+                tickLine={false}
+                width={56}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${Number(value).toFixed(2)}M token`}
+                    labelFormatter={(_, payload) => {
+                      const weekday = payload?.[0]?.payload
+                      return weekday
+                        ? `${weekday.label} · ${weekday.activeDays} 个活跃日`
+                        : ""
+                    }}
+                  />
+                }
+              />
+              <Bar dataKey="tokens" fill="var(--color-tokens)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+
+          <div className="grid grid-cols-2 gap-3 border-t pt-4 text-sm sm:grid-cols-3 xl:grid-cols-1 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+            <div>
+              <p className="text-xs text-muted-foreground">高负荷日</p>
+              <p className="mt-1 font-semibold">{weekdayPeak?.label ?? "—"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {weekdayPeak ? formatTokens(weekdayPeak.totalTokens) : "暂无记录"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">日均用量</p>
+              <p className="mt-1 font-semibold tabular-nums">{formatTokens(weekdayAverage)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">当前筛选范围</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">周末占比</p>
+              <p className="mt-1 font-semibold tabular-nums">
+                {weekdayTotal ? `${((weekendShare / weekdayTotal) * 100).toFixed(1)}%` : "—"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">周六与周日</p>
+            </div>
+          </div>
+        </CardContent>
       </Card>
-    </section>
+    </div>
   )
 }
 
