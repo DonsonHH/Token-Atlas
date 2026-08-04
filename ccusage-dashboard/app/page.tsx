@@ -99,6 +99,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SessionAnalytics } from "@/components/usage/session-analytics";
+import { TrendAnalytics } from "@/components/usage/trend-analytics";
 import { UsageInsights } from "@/components/usage/usage-insights";
 import type {
   UsageDeviceFilter,
@@ -165,6 +167,25 @@ const navigation = [
 ] as const;
 
 const navigationGroups = ["工作台", "数据明细"] as const;
+
+const tabCopy = {
+  overview: {
+    description: "查看各设备的总体 token、费用、缓存复用与模型构成。",
+    title: "用量概览",
+  },
+  raw: {
+    description: "核对 ccusage 原始聚合结果与导入设备的明细数据。",
+    title: "原始数据",
+  },
+  sessions: {
+    description: "从来源、活动时段与模型维度理解本机的会话负荷。",
+    title: "会话记录",
+  },
+  usage: {
+    description: "比较每日、每周、每月的使用节奏、移动均值与缓存复用。",
+    title: "用量趋势",
+  },
+} as const;
 
 function StatCard({
   detail,
@@ -267,6 +288,7 @@ export default function Home() {
   const [source, setSource] = useState<UsageSource>("codex");
   const [tab, setTab] = useState("overview");
   const [chartMetric, setChartMetric] = useState<keyof typeof chartConfig>("tokens");
+  const activeTabCopy = tabCopy[tab as keyof typeof tabCopy] ?? tabCopy.overview;
 
   const requestUsage = useCallback(async () => {
     const query = new URLSearchParams({ days, device: deviceFilter, source });
@@ -561,11 +583,13 @@ export default function Home() {
                   </Badge>
                 ) : null}
               </div>
-              <h2 className="text-3xl font-semibold tracking-[-0.04em]">用量概览</h2>
+              <h2 className="text-3xl font-semibold tracking-[-0.04em]">{activeTabCopy.title}</h2>
               <p className="mt-1.5 text-base text-muted-foreground">
-                {importedDevices.length
+                {tab === "overview" && importedDevices.length
                   ? "汇总本机日志与外部设备的 ccusage JSON；金额为本地估算值。"
-                  : "直接汇总本机 Codex 会话日志；金额为 ccusage 的本地估算值。"}
+                  : tab === "overview"
+                    ? "直接汇总本机 Codex 会话日志；金额为 ccusage 的本地估算值。"
+                    : activeTabCopy.description}
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <Badge className="max-w-full gap-1.5 px-2.5 py-1" variant="secondary">
@@ -1009,6 +1033,7 @@ export default function Home() {
               </TabsContent>
 
               <TabsContent className="space-y-6" value="usage">
+                <TrendAnalytics daily={daily} monthly={monthly} weekly={weekly} />
                 <section className="grid gap-6 xl:grid-cols-2">
                   <PeriodTable periods={daily} subtitle="每日用量" title="按日汇总" />
                   <PeriodTable
@@ -1025,6 +1050,9 @@ export default function Home() {
               </TabsContent>
 
               <TabsContent value="sessions">
+                <div className="mb-6">
+                  <SessionAnalytics sessions={sessions} />
+                </div>
                 <Card className="shadow-none">
                   <CardHeader className="flex flex-row items-start justify-between gap-4">
                     <div>
@@ -1139,6 +1167,7 @@ function SessionTable({ sessions }: { sessions: UsageSnapshot["sessions"] }) {
             <TableHead>模型</TableHead>
             <TableHead>项目</TableHead>
             <TableHead className="text-right">总 token</TableHead>
+            <TableHead className="text-right">缓存复用</TableHead>
             <TableHead className="text-right">费用</TableHead>
           </TableRow>
         </TableHeader>
@@ -1159,13 +1188,18 @@ function SessionTable({ sessions }: { sessions: UsageSnapshot["sessions"] }) {
                   {formatTokens(session.totalTokens)}
                 </TableCell>
                 <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                  {session.totalTokens
+                    ? `${((session.cacheReadTokens / session.totalTokens) * 100).toFixed(1)}%`
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
                   {formatCost(session.costUSD)}
                 </TableCell>
               </TableRow>
             ))
           ) : (
             <TableRow>
-              <TableCell className="h-24 text-center text-muted-foreground" colSpan={5}>
+              <TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>
                 没有可用会话记录。
               </TableCell>
             </TableRow>
