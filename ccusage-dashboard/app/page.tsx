@@ -6,13 +6,19 @@ import {
   CalendarDays,
   Check,
   CircleAlert,
+  CircleHelp,
+  Clock3,
+  Cpu,
   Database,
   Download,
   Gauge,
   History,
   LayoutDashboard,
+  Layers3,
   Menu,
   RefreshCw,
+  Server,
+  Sparkles,
   Table2,
   Zap,
 } from "lucide-react";
@@ -20,7 +26,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
+  Cell,
   CartesianGrid,
+  Pie,
+  PieChart,
   XAxis,
   YAxis,
 } from "recharts";
@@ -47,6 +56,13 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -57,6 +73,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type {
   UsageDeviceFilter,
   UsageSnapshot,
@@ -70,6 +92,20 @@ const chartConfig = {
     label: "Token",
   },
 } satisfies ChartConfig;
+
+const modelChartConfig = {
+  tokens: {
+    label: "Token",
+  },
+} satisfies ChartConfig;
+
+const modelColors = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 const emptyTotals: UsageTotals = {
   cacheCreationTokens: 0,
@@ -134,12 +170,14 @@ function formatProject(value: string | null) {
 
 function StatCard({
   detail,
+  hint,
   icon: Icon,
   label,
   tone,
   value,
 }: {
   detail: string;
+  hint: string;
   icon: typeof Activity;
   label: string;
   tone: "blue" | "emerald" | "orange" | "violet";
@@ -167,9 +205,17 @@ function StatCard({
   return (
     <Card className={`relative overflow-hidden border bg-gradient-to-br shadow-sm ${toneClasses.card}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardDescription className="text-sm font-semibold tracking-tight text-foreground/75">
-          {label}
-        </CardDescription>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <CardDescription className="truncate text-sm font-semibold tracking-tight text-foreground/75">
+            {label}
+          </CardDescription>
+          <Tooltip>
+            <TooltipTrigger aria-label={`${label}说明`} className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
+              <CircleHelp className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>{hint}</TooltipContent>
+          </Tooltip>
+        </div>
         <div className={`flex size-10 items-center justify-center rounded-xl border ${toneClasses.icon}`}>
           <Icon className="size-4.5" strokeWidth={1.9} />
         </div>
@@ -304,12 +350,27 @@ export default function Home() {
     [daily]
   );
 
+  const modelChartData = useMemo(
+    () =>
+      models.slice(0, 5).map((model, index) => ({
+        fill: modelColors[index % modelColors.length],
+        name: model.name,
+        tokens: model.totalTokens,
+      })),
+    [models]
+  );
+
   const cacheHitRate =
     totals.totalTokens > 0
       ? ((totals.cacheReadTokens / totals.totalTokens) * 100).toFixed(1)
       : "0.0";
   const latestDay = daily.at(-1);
   const recentSessions = sessions.slice(0, 10);
+  const latestDeviceUpdate = selectedDevices
+    .map((device) => device.updatedAt)
+    .filter((updatedAt): updatedAt is string => Boolean(updatedAt))
+    .sort()
+    .at(-1);
 
   function downloadRawData() {
     if (!snapshot) return;
@@ -331,7 +392,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-svh bg-[radial-gradient(circle_at_70%_-10%,color-mix(in_oklab,var(--chart-1)_12%,transparent),transparent_32rem)] bg-muted/25 text-foreground">
+    <TooltipProvider delay={180}>
+      <main className="min-h-svh bg-[radial-gradient(circle_at_70%_-10%,color-mix(in_oklab,var(--chart-1)_12%,transparent),transparent_32rem)] bg-muted/25 text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r bg-background/95 lg:flex">
         <div className="flex h-[72px] items-center gap-3 border-b px-6">
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
@@ -398,23 +460,30 @@ export default function Home() {
           </Button>
         </header>
 
-        {menuOpen ? (
-          <nav className="border-b bg-background p-3 lg:hidden" aria-label="移动端仪表盘导航">
-            <div className="grid grid-cols-2 gap-2">
+        <Sheet onOpenChange={setMenuOpen} open={menuOpen}>
+          <SheetContent className="w-[min(22rem,88vw)] gap-0 p-0" side="left">
+            <SheetHeader className="border-b px-5 py-5 pr-12 text-left">
+              <SheetTitle className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                Usage Console
+              </SheetTitle>
+              <SheetDescription>选择要查看的仪表盘模块。</SheetDescription>
+            </SheetHeader>
+            <nav className="space-y-1 p-3" aria-label="移动端仪表盘导航">
               {navigation.map(({ icon: Icon, label, value }) => (
                 <Button
-                  className="justify-start gap-2"
+                  className="h-11 w-full justify-start gap-3 rounded-xl"
                   key={value}
                   onClick={() => selectTab(value)}
                   variant={tab === value ? "secondary" : "ghost"}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-[18px]" />
                   {label}
                 </Button>
               ))}
-            </div>
-          </nav>
-        ) : null}
+            </nav>
+          </SheetContent>
+        </Sheet>
 
         <div className="mx-auto max-w-[1800px] px-5 py-8 sm:px-8 lg:px-10 xl:py-10">
           <div className="mb-8 flex flex-col gap-5 rounded-2xl border bg-background/75 px-5 py-5 shadow-sm backdrop-blur-sm xl:flex-row xl:items-end xl:justify-between xl:px-6">
@@ -439,16 +508,32 @@ export default function Home() {
                   ? "汇总本机日志与外部设备的 ccusage JSON；金额为本地估算值。"
                   : "直接汇总本机 Codex 会话日志；金额为 ccusage 的本地估算值。"}
               </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                <Badge className="max-w-full gap-1.5 px-2.5 py-1" variant="secondary">
+                  <Server className="size-3 shrink-0" />
+                  <span className="max-w-72 truncate">当前：{selectedDeviceLabel}</span>
+                </Badge>
+                <Badge className="gap-1.5 px-2.5 py-1" variant="outline">
+                  <Clock3 className="size-3" />
+                  更新：{formatDate(latestDeviceUpdate ?? null)}
+                </Badge>
+                <Badge className="gap-1.5 px-2.5 py-1" variant="outline">
+                  <Cpu className="size-3" />
+                  {models.length} 个模型
+                </Badge>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 2xl:w-auto 2xl:grid-cols-[minmax(16rem,1.5fr)_10rem_10rem_auto]">
               <Select
                 onValueChange={(value) => value && setDeviceFilter(value as UsageDeviceFilter)}
                 value={deviceFilter}
               >
-                <SelectTrigger className="h-10 w-full bg-background sm:w-56">
-                  <span>{selectedDeviceLabel}</span>
+                <SelectTrigger className="h-10 w-full min-w-0 bg-background">
+                  <span className="min-w-0 flex-1 truncate text-left" title={selectedDeviceLabel}>
+                    {selectedDeviceLabel}
+                  </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="w-[min(92vw,36rem)]" align="end">
                   <SelectItem value="all">综合数据</SelectItem>
                   <SelectItem value="local">本机数据</SelectItem>
                   {devices
@@ -464,8 +549,8 @@ export default function Home() {
                 onValueChange={(value) => value && setSource(value as UsageSource)}
                 value={source}
               >
-                <SelectTrigger className="h-10 w-full bg-background sm:w-40">
-                  <span>{source === "codex" ? "仅 Codex" : "全部来源"}</span>
+                <SelectTrigger className="h-10 w-full min-w-0 bg-background">
+                  <span className="truncate">{source === "codex" ? "仅 Codex" : "全部来源"}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="codex">仅 Codex</SelectItem>
@@ -473,7 +558,7 @@ export default function Home() {
                 </SelectContent>
               </Select>
               <Select onValueChange={(value) => value && setDays(value)} value={days}>
-                <SelectTrigger className="h-10 w-full bg-background sm:w-40">
+                <SelectTrigger className="h-10 w-full min-w-0 bg-background">
                   <span>最近 {days} 天</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -499,6 +584,7 @@ export default function Home() {
                 <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard
                     detail={`最近 ${days} 天 · ${daily.length} 个活跃日${selectedDevices.length > 1 ? ` · ${selectedDevices.length} 台设备` : ""}`}
+                    hint="输入、输出、推理与缓存相关 token 的合计。"
                     icon={Activity}
                     label="总 token"
                     tone="blue"
@@ -506,6 +592,7 @@ export default function Home() {
                   />
                   <StatCard
                     detail={`${formatTokens(totals.inputTokens)} 输入 · ${formatTokens(totals.outputTokens)} 输出`}
+                    hint="不含缓存读取；用于观察实际请求与模型回复规模。"
                     icon={Zap}
                     label="输入与输出"
                     tone="violet"
@@ -513,6 +600,7 @@ export default function Home() {
                   />
                   <StatCard
                     detail={`${cacheHitRate}% 占总用量`}
+                    hint="由模型缓存命中的 token 数量；高占比通常意味着上下文复用更多。"
                     icon={Database}
                     label="缓存读取"
                     tone="orange"
@@ -520,6 +608,7 @@ export default function Home() {
                   />
                   <StatCard
                     detail="仅供本地成本参考"
+                    hint="根据 ccusage 本地定价表估算，不等同于官方账单。"
                     icon={Gauge}
                     label="估算费用"
                     tone="emerald"
@@ -589,13 +678,52 @@ export default function Home() {
                   </Card>
 
                   <Card className="bg-background/90 shadow-sm">
-                    <CardHeader className="pt-5">
-                      <CardTitle className="text-lg">模型分布</CardTitle>
-                      <CardDescription className="mt-1.5 text-sm">按 token 总量排序</CardDescription>
+                    <CardHeader className="flex flex-row items-start justify-between gap-3 pt-5">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Layers3 className="size-4 text-muted-foreground" />
+                          模型分布
+                        </CardTitle>
+                        <CardDescription className="mt-1.5 text-sm">按 token 总量排序</CardDescription>
+                      </div>
+                      <Badge variant="outline">{models.length} 个模型</Badge>
                     </CardHeader>
-                    <CardContent className="space-y-5">
+                    <CardContent className="space-y-4">
                       {models.length ? (
-                        models.slice(0, 5).map((model) => {
+                        <>
+                          <div className="relative h-44 overflow-hidden rounded-xl border bg-muted/20">
+                            <ChartContainer className="h-full w-full" config={modelChartConfig}>
+                              <PieChart>
+                                <ChartTooltip
+                                  content={
+                                    <ChartTooltipContent
+                                      formatter={(value) => formatTokens(Number(value))}
+                                      hideLabel
+                                      nameKey="name"
+                                    />
+                                  }
+                                />
+                                <Pie
+                                  data={modelChartData}
+                                  dataKey="tokens"
+                                  innerRadius={48}
+                                  outerRadius={68}
+                                  paddingAngle={4}
+                                  strokeWidth={0}
+                                >
+                                  {modelChartData.map((item) => (
+                                    <Cell fill={item.fill} key={item.name} />
+                                  ))}
+                                </Pie>
+                              </PieChart>
+                            </ChartContainer>
+                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-[11px] font-medium text-muted-foreground">Top 模型</span>
+                              <span className="text-lg font-semibold tabular-nums">{modelChartData.length}</span>
+                            </div>
+                          </div>
+                          <div className="space-y-4">
+                            {models.slice(0, 5).map((model, index) => {
                           const share = totals.totalTokens
                             ? (model.totalTokens / totals.totalTokens) * 100
                             : 0;
@@ -603,7 +731,13 @@ export default function Home() {
                             <div className="space-y-2" key={model.name}>
                               <div className="flex items-center justify-between gap-3 text-sm">
                                 <div className="min-w-0">
-                                  <p className="truncate font-medium">{model.name}</p>
+                                  <p className="flex items-center gap-2 truncate font-medium">
+                                    <span
+                                      className="size-2 shrink-0 rounded-full"
+                                      style={{ backgroundColor: modelColors[index % modelColors.length] }}
+                                    />
+                                    <span className="truncate">{model.name}</span>
+                                  </p>
                                   <p className="text-xs text-muted-foreground">{formatTokens(model.totalTokens)}</p>
                                 </div>
                                 <span className="text-xs font-medium tabular-nums text-muted-foreground">
@@ -612,13 +746,18 @@ export default function Home() {
                               </div>
                               <div className="h-2 overflow-hidden rounded-full bg-muted">
                                 <div
-                                  className="h-full rounded-full bg-primary transition-[width]"
-                                  style={{ width: `${Math.max(share, 1)}%` }}
+                                  className="h-full rounded-full transition-[width]"
+                                  style={{
+                                    backgroundColor: modelColors[index % modelColors.length],
+                                    width: `${Math.max(share, 1)}%`,
+                                  }}
                                 />
                               </div>
                             </div>
                           );
-                        })
+                            })}
+                          </div>
+                        </>
                       ) : (
                         <p className="text-sm text-muted-foreground">没有模型聚合数据。</p>
                       )}
@@ -664,13 +803,15 @@ export default function Home() {
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-muted-foreground">当前统计设备</span>
-                              <Badge variant="outline">{selectedDeviceLabel}</Badge>
+                              <Badge className="max-w-[65%]" title={selectedDeviceLabel} variant="outline">
+                                <span className="truncate">{selectedDeviceLabel}</span>
+                              </Badge>
                             </div>
                             {selectedDevices.map((device) => (
                               <div className="rounded-xl border bg-muted/20 p-3" key={device.id}>
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="truncate font-medium">{device.name}</p>
+                                    <p className="truncate font-medium" title={device.name}>{device.name}</p>
                                     <p className="mt-1 text-xs text-muted-foreground">
                                       {device.kind === "local" ? "本机实时解析" : "外部汇总导入"} · {device.dailyEntries} 个活跃日
                                     </p>
@@ -778,7 +919,8 @@ export default function Home() {
           ) : null}
         </div>
       </div>
-    </main>
+      </main>
+    </TooltipProvider>
   );
 }
 
