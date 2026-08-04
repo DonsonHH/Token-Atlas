@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  ArrowDownToLine,
   BarChart3,
   CalendarDays,
   Check,
@@ -11,6 +12,7 @@ import {
   Cpu,
   Database,
   Download,
+  FileJson,
   Gauge,
   History,
   LayoutDashboard,
@@ -26,6 +28,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   Cell,
   CartesianGrid,
   Pie,
@@ -34,6 +38,12 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +59,15 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -122,11 +141,13 @@ const emptySessions: UsageSnapshot["sessions"] = [];
 const emptyModels: UsageSnapshot["models"] = [];
 
 const navigation = [
-  { icon: LayoutDashboard, label: "概览", value: "overview" },
-  { icon: BarChart3, label: "用量趋势", value: "usage" },
-  { icon: History, label: "会话记录", value: "sessions" },
-  { icon: Table2, label: "原始数据", value: "raw" },
+  { group: "工作台", icon: LayoutDashboard, label: "概览", value: "overview" },
+  { group: "工作台", icon: BarChart3, label: "用量趋势", value: "usage" },
+  { group: "数据明细", icon: History, label: "会话记录", value: "sessions" },
+  { group: "数据明细", icon: Table2, label: "原始数据", value: "raw" },
 ] as const;
+
+const navigationGroups = ["工作台", "数据明细"] as const;
 
 function formatTokens(value: number, digits = 1) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(digits)}B`;
@@ -360,6 +381,16 @@ export default function Home() {
     [models]
   );
 
+  const weeklyChartData = useMemo(
+    () =>
+      weekly.slice(-8).map((item) => ({
+        label: formatShortDate(item.label),
+        period: item.label,
+        tokens: Number((item.totalTokens / 1_000_000).toFixed(1)),
+      })),
+    [weekly]
+  );
+
   const cacheHitRate =
     totals.totalTokens > 0
       ? ((totals.cacheReadTokens / totals.totalTokens) * 100).toFixed(1)
@@ -386,6 +417,31 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  function downloadCurrentView() {
+    if (!snapshot) return;
+
+    const report = {
+      activeDeviceIds: snapshot.activeDeviceIds,
+      daily,
+      devices: selectedDevices,
+      generatedAt: snapshot.generatedAt,
+      models,
+      monthly,
+      source,
+      totals,
+      weekly,
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `usage-view-${deviceFilter}-${snapshot.generatedAt.slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   function selectTab(value: string) {
     setTab(value);
     setMenuOpen(false);
@@ -404,17 +460,28 @@ export default function Home() {
             <p className="text-xs text-muted-foreground">本地 token 分析</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-1.5 px-4 py-6" aria-label="仪表盘导航">
-          {navigation.map(({ icon: Icon, label, value }) => (
-            <Button
-              className="h-11 w-full justify-start gap-3 rounded-xl px-3 text-sm"
-              key={value}
-              onClick={() => selectTab(value)}
-              variant={tab === value ? "secondary" : "ghost"}
-            >
-              <Icon className="size-[18px]" />
-              {label}
-            </Button>
+        <nav className="flex-1 space-y-6 px-4 py-6" aria-label="仪表盘导航">
+          {navigationGroups.map((group) => (
+            <section key={group}>
+              <p className="mb-2 px-3 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                {group}
+              </p>
+              <div className="space-y-1.5">
+                {navigation
+                  .filter((item) => item.group === group)
+                  .map(({ icon: Icon, label, value }) => (
+                    <Button
+                      className="h-11 w-full justify-start gap-3 rounded-xl px-3 text-sm"
+                      key={value}
+                      onClick={() => selectTab(value)}
+                      variant={tab === value ? "secondary" : "ghost"}
+                    >
+                      <Icon className="size-[18px]" />
+                      {label}
+                    </Button>
+                  ))}
+              </div>
+            </section>
           ))}
         </nav>
         <div className="m-4 rounded-2xl border bg-gradient-to-br from-muted/60 to-transparent p-4 shadow-sm">
@@ -469,17 +536,28 @@ export default function Home() {
               </SheetTitle>
               <SheetDescription>选择要查看的仪表盘模块。</SheetDescription>
             </SheetHeader>
-            <nav className="space-y-1 p-3" aria-label="移动端仪表盘导航">
-              {navigation.map(({ icon: Icon, label, value }) => (
-                <Button
-                  className="h-11 w-full justify-start gap-3 rounded-xl"
-                  key={value}
-                  onClick={() => selectTab(value)}
-                  variant={tab === value ? "secondary" : "ghost"}
-                >
-                  <Icon className="size-[18px]" />
-                  {label}
-                </Button>
+            <nav className="space-y-5 p-3" aria-label="移动端仪表盘导航">
+              {navigationGroups.map((group) => (
+                <section key={group}>
+                  <p className="mb-2 px-3 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                    {group}
+                  </p>
+                  <div className="space-y-1">
+                    {navigation
+                      .filter((item) => item.group === group)
+                      .map(({ icon: Icon, label, value }) => (
+                        <Button
+                          className="h-11 w-full justify-start gap-3 rounded-xl"
+                          key={value}
+                          onClick={() => selectTab(value)}
+                          variant={tab === value ? "secondary" : "ghost"}
+                        >
+                          <Icon className="size-[18px]" />
+                          {label}
+                        </Button>
+                      ))}
+                  </div>
+                </section>
               ))}
             </nav>
           </SheetContent>
@@ -568,10 +646,26 @@ export default function Home() {
                   <SelectItem value="90">最近 90 天</SelectItem>
                 </SelectContent>
               </Select>
-              <Button className="h-10 gap-2 px-4" disabled={!snapshot} onClick={downloadRawData} variant="outline">
-                <Download className="size-4" />
-                导出 JSON
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button className="h-10 gap-2 px-4" disabled={!snapshot} variant="outline" />}
+                >
+                  <Download className="size-4" />
+                  导出数据
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuLabel>导出当前视图</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={downloadCurrentView}>
+                    <ArrowDownToLine className="size-4" />
+                    当前筛选汇总
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={downloadRawData}>
+                    <FileJson className="size-4" />
+                    原始 ccusage JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -800,33 +894,42 @@ export default function Home() {
                       {selectedDevices.length ? (
                         <>
                           <Separator />
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-muted-foreground">当前统计设备</span>
-                              <Badge className="max-w-[65%]" title={selectedDeviceLabel} variant="outline">
-                                <span className="truncate">{selectedDeviceLabel}</span>
-                              </Badge>
-                            </div>
-                            {selectedDevices.map((device) => (
-                              <div className="rounded-xl border bg-muted/20 p-3" key={device.id}>
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-medium" title={device.name}>{device.name}</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {device.kind === "local" ? "本机实时解析" : "外部汇总导入"} · {device.dailyEntries} 个活跃日
-                                    </p>
-                                  </div>
-                                  <Badge variant={device.kind === "local" ? "secondary" : "outline"}>
-                                    {device.kind === "local" ? "本机" : "导入"}
-                                  </Badge>
+                          <Accordion className="rounded-xl border bg-muted/15 px-3" defaultValue={["devices"]}>
+                            <AccordionItem className="border-0" value="devices">
+                              <AccordionTrigger className="py-3 hover:no-underline">
+                                <span className="flex min-w-0 items-center gap-2 text-left text-sm font-medium">
+                                  <Server className="size-4 shrink-0 text-muted-foreground" />
+                                  当前统计设备
+                                </span>
+                                <Badge className="mr-2 max-w-[55%]" title={selectedDeviceLabel} variant="outline">
+                                  <span className="truncate">{selectedDeviceLabel}</span>
+                                </Badge>
+                              </AccordionTrigger>
+                              <AccordionContent className="pb-3">
+                                <div className="space-y-3">
+                                  {selectedDevices.map((device) => (
+                                    <div className="rounded-lg border bg-background/80 p-3" key={device.id}>
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="truncate font-medium" title={device.name}>{device.name}</p>
+                                          <p className="mt-1 text-xs text-muted-foreground">
+                                            {device.kind === "local" ? "本机实时解析" : "外部汇总导入"} · {device.dailyEntries} 个活跃日
+                                          </p>
+                                        </div>
+                                        <Badge variant={device.kind === "local" ? "secondary" : "outline"}>
+                                          {device.kind === "local" ? "本机" : "导入"}
+                                        </Badge>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        <span>数据更新：{formatDate(device.updatedAt)}</span>
+                                        <span>最新用量：{device.latestDate ?? "暂无"}</span>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
-                                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                  <span>数据更新：{formatDate(device.updatedAt)}</span>
-                                  <span>最新用量：{device.latestDate ?? "暂无"}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
                         </>
                       ) : null}
                     </CardContent>
@@ -851,11 +954,50 @@ export default function Home() {
                           </p>
                         </div>
                       </div>
+                      {weeklyChartData.length ? (
+                        <div className="rounded-xl border bg-muted/20 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <span className="flex items-center gap-2 text-xs font-medium text-foreground">
+                              <BarChart3 className="size-3.5 text-muted-foreground" />
+                              周度用量节奏
+                            </span>
+                            <Badge className="text-[10px]" variant="outline">百万 token</Badge>
+                          </div>
+                          <ChartContainer className="h-28 w-full" config={chartConfig}>
+                            <BarChart data={weeklyChartData} margin={{ bottom: 0, left: -18, right: 0, top: 4 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis
+                                axisLine={false}
+                                dataKey="label"
+                                minTickGap={18}
+                                tickLine={false}
+                                tickMargin={8}
+                              />
+                              <ChartTooltip
+                                content={
+                                  <ChartTooltipContent
+                                    formatter={(value) => `${Number(value).toFixed(1)}M token`}
+                                    labelFormatter={(_, payload) => payload?.[0]?.payload?.period ?? ""}
+                                  />
+                                }
+                              />
+                              <Bar dataKey="tokens" fill="var(--color-tokens)" radius={[5, 5, 0, 0]} />
+                            </BarChart>
+                          </ChartContainer>
+                        </div>
+                      ) : null}
                       <div className="flex items-center justify-between text-muted-foreground">
                         <span>最近一日用量</span>
                         <span className="font-medium text-foreground">
                           {latestDay ? formatTokens(latestDay.totalTokens) : "—"}
                         </span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                          <span>缓存复用率</span>
+                          <span className="font-medium text-foreground">{cacheHitRate}%</span>
+                        </div>
+                        <Progress aria-label="缓存复用率" value={Number(cacheHitRate)} />
                       </div>
                       <div className="flex items-center justify-between text-muted-foreground">
                         <span>已解析会话</span>
