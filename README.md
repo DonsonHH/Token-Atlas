@@ -5,6 +5,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![shadcn/ui](https://img.shields.io/badge/shadcn%2Fui-Base_UI-000000)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 Usage Console 是一个运行在**自己电脑上**的使用分析台。它通过 `ccusage` 的离线 JSON 报告读取本机 Codex 日志，不会把会话内容上传到第三方服务。除了本机实时分析，也可以手动导入 Ubuntu、Jetson 等设备导出的汇总 JSON，在一个界面里查看综合数据。
 
@@ -176,6 +177,10 @@ pnpm exec ccusage codex daily --json --offline --last 14
 ## 发布
 
 当前首个稳定版本为 `v0.1.0`。GitHub Release 会附带版本说明和自动生成的源码包；由于本项目是本地 Web 应用，不提供预编译安装包。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。
 
 ## 贡献
 
