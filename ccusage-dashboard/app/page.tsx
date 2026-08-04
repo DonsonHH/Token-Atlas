@@ -56,7 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import type { UsageSnapshot, UsageSource, UsageTotals } from "@/lib/usage";
 
 const chartConfig = {
@@ -131,24 +131,47 @@ function StatCard({
   detail,
   icon: Icon,
   label,
+  tone,
   value,
 }: {
   detail: string;
   icon: typeof Activity;
   label: string;
+  tone: "blue" | "emerald" | "orange" | "violet";
   value: string;
 }) {
+  const toneClasses = {
+    blue: {
+      card: "border-blue-500/15 from-blue-500/12 via-blue-500/[0.035] to-transparent",
+      icon: "border-blue-500/15 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+    },
+    emerald: {
+      card: "border-emerald-500/15 from-emerald-500/12 via-emerald-500/[0.035] to-transparent",
+      icon: "border-emerald-500/15 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    },
+    orange: {
+      card: "border-orange-500/15 from-orange-500/12 via-orange-500/[0.035] to-transparent",
+      icon: "border-orange-500/15 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+    },
+    violet: {
+      card: "border-violet-500/15 from-violet-500/12 via-violet-500/[0.035] to-transparent",
+      icon: "border-violet-500/15 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    },
+  }[tone];
+
   return (
-    <Card className="shadow-none">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardDescription className="font-medium">{label}</CardDescription>
-        <div className="flex size-8 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
-          <Icon className="size-4" strokeWidth={1.8} />
+    <Card className={`relative overflow-hidden border bg-gradient-to-br shadow-sm ${toneClasses.card}`}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardDescription className="text-sm font-semibold tracking-tight text-foreground/75">
+          {label}
+        </CardDescription>
+        <div className={`flex size-10 items-center justify-center rounded-xl border ${toneClasses.icon}`}>
+          <Icon className="size-4.5" strokeWidth={1.9} />
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      <CardContent className="pb-5">
+        <div className="text-3xl font-semibold tracking-[-0.04em] tabular-nums">{value}</div>
+        <p className="mt-1.5 text-sm text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
   );
@@ -157,14 +180,14 @@ function StatCard({
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton className="h-32 rounded-xl" key={index} />
+          <Skeleton className="h-36 rounded-2xl" key={index} />
         ))}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <Skeleton className="h-96 rounded-xl" />
-        <Skeleton className="h-96 rounded-xl" />
+      <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <Skeleton className="h-[27rem] rounded-2xl" />
+        <Skeleton className="h-[27rem] rounded-2xl" />
       </div>
       <Skeleton className="h-72 rounded-xl" />
     </div>
@@ -293,32 +316,32 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-svh bg-muted/25 text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-background lg:flex">
-        <div className="flex h-16 items-center gap-2 border-b px-5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <Gauge className="size-4" />
+    <main className="min-h-svh bg-[radial-gradient(circle_at_70%_-10%,color-mix(in_oklab,var(--chart-1)_12%,transparent),transparent_32rem)] bg-muted/25 text-foreground">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r bg-background/95 lg:flex">
+        <div className="flex h-[72px] items-center gap-3 border-b px-6">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <Gauge className="size-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold tracking-tight">Usage Console</p>
-            <p className="text-[11px] text-muted-foreground">本地 token 分析</p>
+            <p className="text-base font-semibold tracking-tight">Usage Console</p>
+            <p className="text-xs text-muted-foreground">本地 token 分析</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-1 px-3 py-4" aria-label="仪表盘导航">
+        <nav className="flex-1 space-y-1.5 px-4 py-6" aria-label="仪表盘导航">
           {navigation.map(({ icon: Icon, label, value }) => (
             <Button
-              className="w-full justify-start gap-3"
+              className="h-11 w-full justify-start gap-3 rounded-xl px-3 text-sm"
               key={value}
               onClick={() => selectTab(value)}
               variant={tab === value ? "secondary" : "ghost"}
             >
-              <Icon className="size-4" />
+              <Icon className="size-[18px]" />
               {label}
             </Button>
           ))}
         </nav>
-        <div className="m-3 rounded-lg border bg-muted/30 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-medium">
+        <div className="m-4 rounded-2xl border bg-gradient-to-br from-muted/60 to-transparent p-4 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
             <Database className="size-3.5 text-muted-foreground" />
             本地读取模式
           </div>
@@ -328,8 +351,8 @@ export default function Home() {
         </div>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-6">
+      <div className="lg:pl-72">
+        <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b bg-background/95 px-5 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-8">
           <Button
             aria-label="打开导航"
             className="lg:hidden"
@@ -340,14 +363,14 @@ export default function Home() {
             <Menu className="size-5" />
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold sm:text-base">ccusage 使用分析</h1>
+            <h1 className="truncate text-base font-semibold sm:text-lg">ccusage 使用分析</h1>
           </div>
           <Badge className="hidden gap-1.5 sm:flex" variant="secondary">
             <span className="size-1.5 rounded-full bg-emerald-500" />
             本地实时数据
           </Badge>
-          <Button className="gap-2" onClick={() => void loadData()} size="sm" variant="outline">
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+          <Button className="h-9 gap-2 px-3" onClick={() => void loadData()} size="sm" variant="outline">
+            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">刷新</span>
           </Button>
         </header>
@@ -370,8 +393,8 @@ export default function Home() {
           </nav>
         ) : null}
 
-        <div className="mx-auto max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="mx-auto max-w-[1800px] px-5 py-8 sm:px-8 lg:px-10 xl:py-10">
+          <div className="mb-8 flex flex-col gap-5 rounded-2xl border bg-background/75 px-5 py-5 shadow-sm backdrop-blur-sm xl:flex-row xl:items-end xl:justify-between xl:px-6">
             <div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <Badge className="gap-1.5" variant="outline">
@@ -381,8 +404,8 @@ export default function Home() {
                 <Badge variant="secondary">{snapshot?.reader ?? "ccusage"}</Badge>
                 <Badge variant="secondary">{snapshot?.offline ? "--offline" : "本地模式"}</Badge>
               </div>
-              <h2 className="text-2xl font-semibold tracking-tight">用量概览</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <h2 className="text-3xl font-semibold tracking-[-0.04em]">用量概览</h2>
+              <p className="mt-1.5 text-base text-muted-foreground">
                 直接汇总本机 Codex 会话日志；金额为 ccusage 的本地估算值。
               </p>
             </div>
@@ -391,7 +414,7 @@ export default function Home() {
                 onValueChange={(value) => value && setSource(value as UsageSource)}
                 value={source}
               >
-                <SelectTrigger className="w-full bg-background sm:w-36">
+                <SelectTrigger className="h-10 w-full bg-background sm:w-40">
                   <span>{source === "codex" ? "仅 Codex" : "全部来源"}</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -400,7 +423,7 @@ export default function Home() {
                 </SelectContent>
               </Select>
               <Select onValueChange={(value) => value && setDays(value)} value={days}>
-                <SelectTrigger className="w-full bg-background sm:w-36">
+                <SelectTrigger className="h-10 w-full bg-background sm:w-40">
                   <span>最近 {days} 天</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -410,7 +433,7 @@ export default function Home() {
                   <SelectItem value="90">最近 90 天</SelectItem>
                 </SelectContent>
               </Select>
-              <Button className="gap-2" disabled={!snapshot} onClick={downloadRawData} variant="outline">
+              <Button className="h-10 gap-2 px-4" disabled={!snapshot} onClick={downloadRawData} variant="outline">
                 <Download className="size-4" />
                 导出 JSON
               </Button>
@@ -421,57 +444,53 @@ export default function Home() {
           {!loading && error ? <EmptyState message={error} /> : null}
 
           {!loading && snapshot ? (
-            <Tabs className="space-y-6" onValueChange={setTab} value={tab}>
-              <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
-                {navigation.map(({ label, value }) => (
-                  <TabsTrigger key={value} value={value}>
-                    {label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              <TabsContent className="space-y-6" value="overview">
-                <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Tabs className="space-y-8" onValueChange={setTab} value={tab}>
+              <TabsContent className="space-y-8" value="overview">
+                <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard
                     detail={`最近 ${days} 天 · ${daily.length} 个活跃日`}
                     icon={Activity}
                     label="总 token"
+                    tone="blue"
                     value={formatTokens(totals.totalTokens)}
                   />
                   <StatCard
                     detail={`${formatTokens(totals.inputTokens)} 输入 · ${formatTokens(totals.outputTokens)} 输出`}
                     icon={Zap}
                     label="输入与输出"
+                    tone="violet"
                     value={formatTokens(totals.inputTokens + totals.outputTokens)}
                   />
                   <StatCard
                     detail={`${cacheHitRate}% 占总用量`}
                     icon={Database}
                     label="缓存读取"
+                    tone="orange"
                     value={formatTokens(totals.cacheReadTokens)}
                   />
                   <StatCard
                     detail="仅供本地成本参考"
                     icon={Gauge}
                     label="估算费用"
+                    tone="emerald"
                     value={formatCost(totals.costUSD)}
                   />
                 </section>
 
-                <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                  <Card className="shadow-none">
-                    <CardHeader>
+                <section className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_25rem]">
+                  <Card className="border-blue-500/10 bg-background/90 shadow-sm">
+                    <CardHeader className="pt-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <CardTitle>每日 token 趋势</CardTitle>
-                          <CardDescription className="mt-1">最近 {days} 天的真实日志汇总</CardDescription>
+                          <CardTitle className="text-lg">每日 token 趋势</CardTitle>
+                          <CardDescription className="mt-1.5 text-sm">最近 {days} 天的真实日志汇总</CardDescription>
                         </div>
                         <Badge variant="outline">单位：百万 token</Badge>
                       </div>
                     </CardHeader>
                     <CardContent>
                       {chartData.length ? (
-                        <ChartContainer className="h-[286px] w-full" config={chartConfig}>
+                        <ChartContainer className="h-[350px] w-full" config={chartConfig}>
                           <AreaChart accessibilityLayer data={chartData} margin={{ left: -18, right: 8, top: 8 }}>
                             <defs>
                               <linearGradient id="fillTokens" x1="0" x2="0" y1="0" y2="1">
@@ -512,19 +531,19 @@ export default function Home() {
                           </AreaChart>
                         </ChartContainer>
                       ) : (
-                        <div className="flex h-[286px] items-center justify-center text-sm text-muted-foreground">
+                        <div className="flex h-[350px] items-center justify-center text-sm text-muted-foreground">
                           所选范围内没有日志记录。
                         </div>
                       )}
                     </CardContent>
                   </Card>
 
-                  <Card className="shadow-none">
-                    <CardHeader>
-                      <CardTitle>模型分布</CardTitle>
-                      <CardDescription className="mt-1">按 token 总量排序</CardDescription>
+                  <Card className="bg-background/90 shadow-sm">
+                    <CardHeader className="pt-5">
+                      <CardTitle className="text-lg">模型分布</CardTitle>
+                      <CardDescription className="mt-1.5 text-sm">按 token 总量排序</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-5">
                       {models.length ? (
                         models.slice(0, 5).map((model) => {
                           const share = totals.totalTokens
@@ -541,7 +560,7 @@ export default function Home() {
                                   {share.toFixed(1)}%
                                 </span>
                               </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                              <div className="h-2 overflow-hidden rounded-full bg-muted">
                                 <div
                                   className="h-full rounded-full bg-primary transition-[width]"
                                   style={{ width: `${Math.max(share, 1)}%` }}
@@ -557,11 +576,11 @@ export default function Home() {
                   </Card>
                 </section>
 
-                <section className="grid gap-6 xl:grid-cols-2">
-                  <Card className="shadow-none">
-                    <CardHeader>
-                      <CardTitle>数据来源</CardTitle>
-                      <CardDescription className="mt-1">每次刷新均重新运行本地 ccusage。</CardDescription>
+                <section className="grid gap-7 xl:grid-cols-2">
+                  <Card className="bg-background/90 shadow-sm">
+                    <CardHeader className="pt-5">
+                      <CardTitle className="text-lg">数据来源</CardTitle>
+                      <CardDescription className="mt-1.5 text-sm">每次刷新均重新运行本地 ccusage。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
                       <div className="flex items-center justify-between gap-4">
@@ -588,10 +607,10 @@ export default function Home() {
                     </CardContent>
                   </Card>
 
-                  <Card className="shadow-none">
-                    <CardHeader>
-                      <CardTitle>当前数据状态</CardTitle>
-                      <CardDescription className="mt-1">没有以示例数据代替读取失败的数据。</CardDescription>
+                  <Card className="bg-background/90 shadow-sm">
+                    <CardHeader className="pt-5">
+                      <CardTitle className="text-lg">当前数据状态</CardTitle>
+                      <CardDescription className="mt-1.5 text-sm">没有以示例数据代替读取失败的数据。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
                       <div className="flex items-center gap-3 rounded-lg border bg-emerald-500/5 p-3 text-emerald-800 dark:text-emerald-300">
