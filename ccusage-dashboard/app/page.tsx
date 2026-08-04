@@ -62,6 +62,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -405,18 +406,28 @@ export default function Home() {
     .sort()
     .at(-1);
 
-  function downloadRawData() {
-    if (!snapshot) return;
-
-    const blob = new Blob([JSON.stringify(snapshot.raw, null, 2)], {
-      type: "application/json",
+  function downloadJson(filename: string, payload: unknown) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `ccusage-${source}-${snapshot.generatedAt.slice(0, 10)}.json`;
+    anchor.download = filename;
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function downloadRawData() {
+    if (!snapshot) return;
+
+    downloadJson(
+      `ccusage-${source}-${snapshot.generatedAt.slice(0, 10)}.json`,
+      snapshot.raw
+    );
   }
 
   function downloadCurrentView() {
@@ -433,15 +444,10 @@ export default function Home() {
       totals,
       weekly,
     };
-    const blob = new Blob([JSON.stringify(report, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `usage-view-${deviceFilter}-${snapshot.generatedAt.slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadJson(
+      `usage-view-${deviceFilter}-${snapshot.generatedAt.slice(0, 10)}.json`,
+      report
+    );
   }
 
   function selectTab(value: string) {
@@ -659,11 +665,13 @@ export default function Home() {
                   导出数据
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuLabel>导出当前视图</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={downloadCurrentView}>
-                    <ArrowDownToLine className="size-4" />
-                    当前筛选汇总
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>导出当前视图</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={downloadCurrentView}>
+                      <ArrowDownToLine className="size-4" />
+                      当前筛选汇总
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={downloadRawData}>
                     <FileJson className="size-4" />
