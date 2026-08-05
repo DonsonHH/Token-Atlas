@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  一个以隐私为先的本地 ccusage 仪表盘，用于清晰分析 Codex 的 token、缓存、会话、模型、成本估算与多设备用量。
+  一个以隐私为先的本地仪表盘：把 ccusage 可读取的 AI 编程 Agent 用量、缓存、模型与多设备汇总放到同一视图中。
 </p>
 
 <p align="center">
@@ -15,226 +15,178 @@
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License">
 </p>
 
-Token Atlas 是你的私有 Token 使用地图：它在本机汇总 ccusage 可解析的数据，将 Windows、Ubuntu、Jetson 等设备的 Codex 用量放进同一张图谱，同时避免把会话正文或个人使用数据上传到第三方服务。
+![Token Atlas 仪表盘预览](docs/preview.png)
 
-![Token Atlas 仪表盘预览](docs/preview.svg)
+## 它解决什么问题
 
-## 为什么使用它
+Token Atlas 只在你的机器上读取 ccusage 的离线汇总。它适合同时使用多种 Agent、在 Windows 与 Ubuntu / Jetson 之间切换，或希望长期观察 token 规模、缓存复用和模型结构的个人开发者。
 
-| 你想回答的问题 | 对应能力 |
+它不上传会话正文，也不需要 API Key。浏览器仅请求本地的 `/api/usage`；外部设备只通过你主动复制或导入的 JSON 汇总参与统计。
+
+| 你想知道 | Token Atlas 提供的答案 |
 | --- | --- |
-| 最近 token 用在了哪里？ | 日、周、月趋势，输入输出构成，缓存复用率和模型占比 |
-| 某台设备占了多少？ | 本机、综合数据、单个导入设备之间一键筛选 |
-| 今天的峰值是否异常？ | 每日趋势、移动均线、工作日分布和会话活跃分析 |
-| 导出的数据可靠吗？ | 当前筛选汇总与原始 ccusage JSON 分开导出，文件名会自动净化 |
-| 能否长期保存自己的记录？ | 设备导入采用本地 JSON；仓库默认忽略你的个人导出文件 |
+| 总共用了多少？ | 精确 token 数字与紧凑单位显示可一键切换，附带活跃日与设备覆盖范围。 |
+| 用量何时发生变化？ | 同一张日、周、月趋势图，可按总量、请求、缓存或模型维度查看。 |
+| 哪个模型或设备贡献最多？ | 模型排行、综合设备筛选与外部设备导入状态。 |
+| 本机会话主要来自哪里？ | 本地会话规模、项目负载与最后活跃时间分布。 |
 
-## 功能一览
+## 支持的 Agent 与数据范围
 
-- 读取真实本机 ccusage 离线报告，不依赖云端账户或 API Key。
-- 展示 token、输入输出、缓存读写、推理输出和本地成本估算。
-- 支持本机、综合、单台外部设备以及 Codex / 全部来源筛选。
-- 提供模型分布、日周月趋势、移动均线、缓存复用、工作日与会话图表。
-- 提供深色 / 浅色主题、响应式布局、可访问的图表与清晰的数据状态。
-- 导出当前筛选视图或原始 ccusage JSON；不会因菜单组件状态而中断下载。
-- 若仅浏览导入设备，应用不会再强制执行本机 ccusage，便于在没有本机 Codex 日志的电脑上查看汇总。
+Token Atlas 使用 ccusage 的离线报告。界面可按已识别来源筛选 Claude Code、OpenAI Codex、OpenCode、Amp、Droid、Codebuff、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI 与 Gemini CLI。
+
+可用来源取决于本机实际日志。外部导入默认标记为 Codex，也可在导入时显式指定真实来源；没有稳定来源字段时，应用不会猜测或伪造分类。
+
+## 核心功能
+
+- 概览页用四个语义明确的 KPI 回答规模、覆盖度、缓存复用与本地 API 参考价。
+- 总 token 默认显示完整整数；点击数字即可在精确数值与 `4.4B` 这类紧凑单位之间切换。
+- 趋势页支持 7 / 14 / 30 / 90 天和自定义日期，按日、周、月重新聚合数据。
+- 平滑面积图可切换总量、请求、缓存，或按模型查看堆叠结构；坐标轴会自动使用合适的 token 单位。
+- 会话页只展示本机可解析的明细。外部设备没有会话记录时会明确说明，并提供切回本机的操作。
+- 支持浅色 / 深色主题、响应式布局、当前筛选导出、原始 JSON 审计与导入设备状态。
 
 ## 快速开始
 
 ### 前置条件
 
 - Node.js 20 或更高版本。
-- pnpm 10 或更高版本，推荐通过 Corepack 启用。
-- 需要分析本机数据时，本机应有可被 ccusage 读取的 Codex 日志。
+- pnpm 10 或更高版本；推荐通过 Corepack 启用。
+- 如需分析本机数据，至少有一种受 ccusage 支持的 Agent 日志。
 
-~~~powershell
+```powershell
 git clone https://github.com/DonsonHH/Token-Atlas.git
 cd Token-Atlas\ccusage-dashboard
 
 corepack enable
 pnpm install
 pnpm dev
-~~~
+```
 
-随后访问 <http://localhost:3000>。
+打开 <http://localhost:3000> 即可查看仪表盘。
 
 ### Windows 一键启动
 
-在 <code>ccusage-dashboard</code> 目录执行：
+首次安装依赖后，可在 `ccusage-dashboard` 目录执行：
 
-~~~powershell
+```powershell
 .\scripts\open-dashboard.ps1
-~~~
+```
 
-脚本会检查本地服务；服务尚未启动时会在后台启动，再打开浏览器。首次运行或依赖更新后，仍需先执行一次 <code>pnpm install</code>。
+脚本会检查本地服务；服务未运行时会后台启动，再打开浏览器。依赖升级后只需重新执行一次 `pnpm install`。
 
 ## 从 Ubuntu / Jetson 导入数据
 
-外部设备导入的是汇总用量，不会导入会话正文。适合没有 SSH、只能手动复制文件的场景。
+外部设备导入的是按日聚合用量，不包含会话正文。最省事的方式是：在 Ubuntu / Jetson 生成并打开 JSON，复制全部内容，然后在 Windows 端从剪贴板导入。
 
-### 1. 在 Ubuntu 或 Jetson 上生成 JSON
+### 1. 在 Ubuntu 或 Jetson 导出
 
-如果已经安装了 ccusage：
+将 `ccusage-dashboard/scripts/export-jetson-usage.sh` 复制到设备后执行：
 
-~~~bash
-ccusage codex daily --json --offline --last 90 > jetson-codex-usage.json
-~~~
+```bash
+bash export-jetson-usage.sh
+```
 
-如果没有全局安装，可使用 pnpm 临时执行：
+它默认导出最近 90 天的 Codex 数据并打开文件。若系统没有 `ccusage`，脚本会尝试使用 `pnpm dlx`；两者都没有时会明确提示安装要求。
 
-~~~bash
-pnpm dlx ccusage@20.0.19 codex daily --json --offline --last 90 > jetson-codex-usage.json
-~~~
+如需指定文件、设备名称或来源：
 
-### 2. 手动复制到运行仪表盘的电脑
+```bash
+bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
+```
 
-把 JSON 文件复制到项目中的下列位置，再点击页面右上角“刷新”：
+将最后一个参数改为 `all`，可导出 ccusage 识别到的全部来源。
 
-~~~powershell
-cd Token-Atlas\ccusage-dashboard
-New-Item -ItemType Directory -Force .\data\devices
-Copy-Item <复制过来的 JSON 文件路径> .\data\devices\jetson-orin-nano.json
-~~~
+### 2. 在 Windows 导入
 
-文件至少需要包含 <code>daily</code> 数组。可以加上用于界面展示的元数据：
+复制 JSON 全文后，在 `ccusage-dashboard` 目录运行：
 
-~~~json
-{
-  "deviceName": "NVIDIA Jetson Orin Nano",
-  "exportedAt": "2026-08-04T12:00:00Z",
-  "daily": []
-}
-~~~
-
-<code>data/devices/*.json</code> 已被 Git 忽略，请不要将自己的用量数据提交到仓库。
-
-### 最快捷的双机导入
-
-仓库还提供两份辅助脚本，适合两台设备之间通过剪贴板传递 JSON：
-
-1. 将 <code>scripts/export-jetson-usage.sh</code> 复制到 Ubuntu / Jetson 后运行 <code>bash export-jetson-usage.sh</code>。它会导出最近 90 天、补充设备元数据，并自动打开 JSON 文件。
-2. 在 Jetson 中复制打开文件里的全部 JSON。
-3. 回到 Windows，在 <code>ccusage-dashboard</code> 目录运行下列命令。它会读取剪贴板、校验 JSON，并原子更新本机的导入文件：
-
-~~~powershell
+```powershell
 .\scripts\import-usage.ps1
-~~~
+```
 
-如需从已有文件导入，可改用：
+脚本会校验 JSON、补齐设备与来源元数据，并以原子方式写入 `data/devices/jetson-orin-nano.json`。回到页面点击“刷新”，再选择“综合数据”或该设备即可查看。
 
-~~~powershell
-.\scripts\import-usage.ps1 -InputPath C:\path\to\jetson-orin-nano.json
-~~~
+已有文件可直接导入，也可指定来源：
 
-## 数据范围与隐私
+```powershell
+.\scripts\import-usage.ps1 -Source codex -InputPath C:\path\to\jetson-usage.json
+```
 
-Token Atlas 处理的是 ccusage 输出中的聚合字段：日期、token、模型、会话目录、活跃时间和本地成本估算。
+`data/devices/*.json` 默认被 Git 忽略。请不要提交自己的用量导出文件。
 
-- 不上传、不展示、不复制会话正文。
-- 默认使用 <code>--offline</code>；浏览器只访问本地的 <code>/api/usage</code>。
-- “估算费用”来自 ccusage 本地定价表，仅用于趋势参考，不等同于 OpenAI 账单、额度或 credits。
-- 导出发生在浏览器本地，导入文件也只保存在你的设备上。
+## 隐私与数据说明
 
-## 架构概览
+Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目录、活跃时间和本地成本估算。它不会上传、展示或复制会话正文。
 
-应用的对外接口保持简单：页面只请求 <code>/api/usage</code>，路由只调用 <code>readUsageSnapshot</code>。CLI、文件系统与兼容性处理被收敛在内部模块中，便于定位问题和编写回归测试。
+“API 参考价”来自 ccusage 的本地定价表，仅用于观察趋势；它不是服务商账单、额度或 credits。导出在浏览器本地完成，导入文件也只保留在你的设备上。
 
-~~~mermaid
+## 架构
+
+页面只请求 `/api/usage`。路由将本机 ccusage 输出与 `data/devices/*.json` 导入汇总交给 `readUsageSnapshot`，再返回稳定的 `UsageSnapshot` 供界面使用。
+
+```mermaid
 flowchart LR
   Browser["浏览器仪表盘"] --> Route["/api/usage"]
   Route --> Reader["readUsageSnapshot"]
-  Reader --> Cli["ccusage CLI 适配"]
-  Cli --> Local["本机 ~/.codex 日志"]
-  Reader --> Imports["设备导入适配"]
-  Imports --> Json["data/devices/*.json"]
-  Reader --> Domain["纯数据归一化与聚合"]
+  Reader --> Cli["ccusage 离线报告"]
+  Reader --> Imports["data/devices/*.json"]
+  Cli --> Local["本机 Agent 日志"]
+  Imports --> Reader
+  Reader --> Domain["归一化与聚合"]
   Domain --> Snapshot["UsageSnapshot"]
   Snapshot --> Browser
-~~~
+```
 
-~~~text
-ccusage-dashboard/
-├── app/                     Next.js 页面与本地路由
-├── components/usage/        图表、洞察与会话展示
-├── hooks/                   浏览器端请求生命周期
-├── lib/
-│   ├── usage.ts             读取快照的编排入口
-│   ├── usage-domain.ts      纯归一化、聚合与设备选择逻辑
-│   ├── usage-imports.ts     导入 JSON 的文件系统适配
-│   ├── usage-export.ts      可测试的导出视图与安全文件名
-│   └── download.ts          浏览器下载副作用
-├── tests/                   Node 原生回归测试
-└── scripts/                 Windows 启动脚本
-~~~
+`usage-domain.ts` 只处理归一化、聚合和设备选择，因此可以脱离文件系统与浏览器独立测试。`usage.ts` 则负责 CLI、导入文件与数据快照的编排。
 
-其中 <code>usage-domain.ts</code> 不访问进程、文件系统或浏览器，可独立测试；<code>usage.ts</code> 负责把 CLI 与导入设备的结果组合成一个稳定的 <code>UsageSnapshot</code>。这种划分让解析兼容、聚合规则和 I/O 故障更容易分别维护。
+## 开发与验证
 
-## 开发、验证与发布
-
-在 <code>ccusage-dashboard</code> 目录运行：
+在 `ccusage-dashboard` 目录运行：
 
 | 命令 | 用途 |
 | --- | --- |
-| <code>pnpm dev</code> | 启动本地开发服务器 |
-| <code>pnpm lint</code> | ESLint 代码质量检查 |
-| <code>pnpm typecheck</code> | TypeScript 严格类型检查 |
-| <code>pnpm test</code> | 编译并运行数据归一化、聚合、设备选择和导出命名回归测试 |
-| <code>pnpm build</code> | 生产构建 |
-| <code>pnpm verify</code> | 依次运行 lint、typecheck、test 和 build |
+| `pnpm dev` | 启动开发服务器 |
+| `pnpm lint` | 执行 ESLint 检查 |
+| `pnpm typecheck` | 执行 TypeScript 严格类型检查 |
+| `pnpm test` | 运行数据归一化、聚合、设备选择与导出回归测试 |
+| `pnpm build` | 构建生产版本 |
+| `pnpm verify` | 依次运行 lint、typecheck、test 和 build |
 
-GitHub Actions 会在每次 push 与 Pull Request 上执行同样的 lint、类型检查、测试和生产构建。
+GitHub Actions 会在推送与 Pull Request 时执行同样的验证。
 
-## 部署建议
+## 部署
 
-### 推荐：日志所在机器本地运行
+推荐在日志所在机器本地运行。ccusage 需要读取本机 Agent 日志，部署到无状态云平台通常既无法访问数据，也违背本项目的隐私目标。
 
-这是最适合本项目的部署方式。ccusage 需要读取运行机器上的 <code>~/.codex</code> 日志，因此部署到无状态云平台通常既无法看到你的数据，也不符合本项目的隐私目标。
-
-~~~powershell
+```powershell
 cd ccusage-dashboard
 pnpm install
 pnpm build
 pnpm start
-~~~
+```
 
-### 可选：受信任局域网查看
+如要在受信任局域网查看，可绑定到局域网地址。请仅在防火墙、VPN 或反向代理鉴权已配置的网络中使用，切勿直接将端口暴露到公网。
 
-只在防火墙、VPN 或反向代理鉴权已经妥善配置的受信任网络中使用：
-
-~~~bash
-cd ccusage-dashboard
-pnpm install
-pnpm build
+```bash
 pnpm start -- --hostname 0.0.0.0 --port 3000
-~~~
-
-然后通过 <code>http://主机-IP:3000</code> 访问。不要把端口 3000 直接暴露到公网；应用本身不提供登录或权限控制。
+```
 
 ## 故障排查
 
-### 页面提示没有本机数据
+### 页面没有本机数据
 
-先在应用目录执行：
-
-~~~bash
-pnpm exec ccusage codex daily --json --offline --last 14
-~~~
-
-若没有记录，请先在该机器完成至少一次 Codex 会话；若命令找不到依赖，请执行 <code>pnpm install</code>。
+在应用目录运行 `pnpm exec ccusage daily --json --offline --last 14`。若没有记录，请确认这台机器已有受支持 Agent 的本地日志，并已完成 `pnpm install`。
 
 ### 导入设备没有显示
 
-1. 文件必须位于 <code>ccusage-dashboard/data/devices/</code>。
-2. 扩展名必须是 <code>.json</code>，且 JSON 合法。
-3. 根对象必须包含非空的 <code>daily</code> 数组。
-4. 复制完成后点击“刷新”；选择“综合数据”或该设备即可查看。
+确认文件位于 `ccusage-dashboard/data/devices/`，扩展名为 `.json`，根对象中包含非空 `daily` 数组。导入完成后刷新页面，并切换到“综合数据”或目标设备。
 
 ### 成本数字与账单不一致
 
-这是预期行为。仪表盘显示的是 ccusage 按本地定价表推导的估算，不是官方结算数据。
+这是预期行为。Token Atlas 展示的是 ccusage 根据本地定价表推导的参考值，不是官方结算金额。
 
 ## 贡献与许可
 
-欢迎提交 Issue 或 Pull Request。提交前请在 <code>ccusage-dashboard</code> 目录执行 <code>pnpm verify</code>。
+欢迎提交 Issue 或 Pull Request。提交前请在 `ccusage-dashboard` 目录执行 `pnpm verify`。
 
-本项目使用 [MIT License](LICENSE) 发布。最新公开版本见 [Releases](https://github.com/DonsonHH/Token-Atlas/releases)。
+项目以 [MIT License](LICENSE) 发布。查看 [Releases](https://github.com/DonsonHH/Token-Atlas/releases) 获取最新版本。

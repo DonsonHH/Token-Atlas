@@ -11,7 +11,9 @@ import type {
 type UsageRequest = {
   days: string;
   device: UsageDeviceFilter;
+  endDate?: string;
   source: UsageSource;
+  startDate?: string;
 };
 
 type UsageErrorPayload = {
@@ -31,6 +33,8 @@ async function fetchUsageSnapshot(
     device: request.device,
     source: request.source,
   });
+  if (request.startDate) query.set("start", request.startDate);
+  if (request.endDate) query.set("end", request.endDate);
   const response = await fetch("/api/usage?" + query, {
     cache: "no-store",
     signal,
@@ -45,7 +49,7 @@ async function fetchUsageSnapshot(
 }
 
 export function useUsageSnapshot(request: UsageRequest) {
-  const { days, device, source } = request;
+  const { days, device, endDate, source, startDate } = request;
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [snapshot, setSnapshot] = useState<UsageSnapshot | null>(null);
@@ -59,7 +63,7 @@ export function useUsageSnapshot(request: UsageRequest) {
 
       try {
         const nextSnapshot = await fetchUsageSnapshot(
-          { days, device, source },
+          { days, device, endDate, source, startDate },
           signal
         );
         if (currentRequestId === requestId.current && !signal?.aborted) {
@@ -75,7 +79,7 @@ export function useUsageSnapshot(request: UsageRequest) {
         }
       }
     },
-    [days, device, source]
+    [days, device, endDate, source, startDate]
   );
 
   useEffect(() => {

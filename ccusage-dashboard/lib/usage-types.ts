@@ -1,4 +1,27 @@
-export type UsageSource = "codex" | "all";
+export const usageSourceOptions = [
+  { command: null, label: "全部已识别来源", value: "all" },
+  { command: "claude", label: "Claude Code", value: "claude" },
+  { command: "codex", label: "OpenAI Codex", value: "codex" },
+  { command: "opencode", label: "OpenCode", value: "opencode" },
+  { command: "amp", label: "Amp", value: "amp" },
+  { command: "droid", label: "Droid", value: "droid" },
+  { command: "codebuff", label: "Codebuff", value: "codebuff" },
+  { command: "hermes", label: "Hermes Agent", value: "hermes" },
+  { command: "pi", label: "pi-agent", value: "pi" },
+  { command: "goose", label: "Goose", value: "goose" },
+  { command: "openclaw", label: "OpenClaw", value: "openclaw" },
+  { command: "kilo", label: "Kilo", value: "kilo" },
+  { command: "kimi", label: "Kimi", value: "kimi" },
+  { command: "qwen", label: "Qwen", value: "qwen" },
+  { command: "copilot", label: "GitHub Copilot CLI", value: "copilot" },
+  { command: "gemini", label: "Gemini CLI", value: "gemini" },
+] as const;
+
+export type UsageSource = (typeof usageSourceOptions)[number]["value"];
+
+export function usageSourceLabel(source: UsageSource) {
+  return usageSourceOptions.find((option) => option.value === source)?.label ?? source;
+}
 export type UsageDeviceFilter = "all" | "local" | string;
 
 export type UsageDevice = {
@@ -7,6 +30,7 @@ export type UsageDevice = {
   kind: "imported" | "local";
   latestDate: string | null;
   name: string;
+  source: UsageSource;
   updatedAt: string | null;
 };
 

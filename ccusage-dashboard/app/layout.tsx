@@ -16,7 +16,7 @@ const themeScript = `
 `;
 
 export const metadata: Metadata = {
-  description: "Token Atlas 是用于汇总本机与多设备 Codex token 用量的私有分析台。",
+  description: "Token Atlas 是用于汇总本机与多设备 AI 编程 Agent token 用量的私有分析台。",
   icons: {
     icon: "/token-atlas-mark.svg",
   },

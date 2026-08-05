@@ -5,6 +5,9 @@ param(
 
   [string]$DeviceName = "NVIDIA Jetson Orin Nano",
 
+  [ValidateSet("all", "claude", "codex", "opencode", "amp", "droid", "codebuff", "hermes", "pi", "goose", "openclaw", "kilo", "kimi", "qwen", "copilot", "gemini")]
+  [string]$Source = "codex",
+
   [string]$InputPath
 )
 
@@ -39,6 +42,7 @@ if ($null -eq $usage.daily -or @($usage.daily).Count -eq 0) {
 }
 
 $usage | Add-Member -NotePropertyName "deviceName" -NotePropertyValue $DeviceName -Force
+$usage | Add-Member -NotePropertyName "source" -NotePropertyValue $Source -Force
 
 if ([string]::IsNullOrWhiteSpace([string]$usage.exportedAt)) {
   $usage | Add-Member -NotePropertyName "exportedAt" -NotePropertyValue ([DateTime]::UtcNow.ToString("o")) -Force

@@ -12,6 +12,7 @@ import {
   normalizeUsageDays,
   recentUsagePeriods,
   selectUsageDevices,
+  usagePeriodsInRange,
   usageModelsFrom,
   usagePeriodsFrom,
   usageSessionsFrom,
@@ -24,6 +25,7 @@ import type {
   UsageSnapshot,
   UsageSource,
 } from "./usage-types";
+import { usageSourceOptions } from "./usage-types";
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 24 * 1024 * 1024;
@@ -40,6 +42,7 @@ export type {
 } from "./usage-types";
 
 export { normalizeUsageDays as normalizeDays } from "./usage-domain";
+export { usageSourceLabel, usageSourceOptions } from "./usage-types";
 
 type LocalReports = {
   dailyRaw: unknown;
@@ -52,8 +55,8 @@ function ccusageCommandArgs(
   command: string,
   extraArgs: string[]
 ): string[] {
-  const namespace = source === "codex" ? ["codex"] : [];
-  return [...namespace, command, "--json", "--offline", ...extraArgs];
+  const namespace = usageSourceOptions.find((option) => option.value === source)?.command;
+  return [...(namespace ? [namespace] : []), command, "--json", "--offline", ...extraArgs];
 }
 
 async function runCcusage(args: string[]): Promise<unknown> {
@@ -119,6 +122,7 @@ function localDeviceFrom(daily: ReturnType<typeof usagePeriodsFrom>): UsageDevic
     kind: "local",
     latestDate: latestUsageLabel(daily),
     name: "本机",
+    source: "all",
     updatedAt: new Date().toISOString(),
   };
 }
@@ -126,11 +130,15 @@ function localDeviceFrom(daily: ReturnType<typeof usagePeriodsFrom>): UsageDevic
 export async function readUsageSnapshot({
   days,
   device,
+  endDate,
   source,
+  startDate,
 }: {
   days: number;
   device: UsageDeviceFilter;
+  endDate?: string;
   source: UsageSource;
+  startDate?: string;
 }): Promise<UsageSnapshot> {
   const rangeDays = normalizeUsageDays(days);
   const imported = readImportedUsage();
@@ -141,24 +149,19 @@ export async function readUsageSnapshot({
   const localDaily = localReports
     ? usagePeriodsFrom(localReports.dailyRaw, "daily")
     : [];
-  const parsedLocalMonthly = localReports?.monthlyRaw
-    ? usagePeriodsFrom(localReports.monthlyRaw, "monthly")
-    : [];
-  const localMonthly = parsedLocalMonthly.length
-    ? parsedLocalMonthly
-    : monthlyUsagePeriods(localDaily);
-  const selectedImportedDaily = selection.selectedImportedDevices.flatMap(
+  const selectedImportedDevices = selection.selectedImportedDevices.filter(
+    (item) => source === "all" || item.source === "all" || item.source === source
+  );
+  const selectedImportedDaily = selectedImportedDevices.flatMap(
     (item) => imported.dailyByDevice[item.id] ?? []
   );
   const importedDaily = recentUsagePeriods(selectedImportedDaily, rangeDays);
-  const daily = mergeUsagePeriods(
-    selection.includeLocal ? localDaily : [],
-    importedDaily
+  const daily = usagePeriodsInRange(
+    mergeUsagePeriods(selection.includeLocal ? localDaily : [], importedDaily),
+    startDate,
+    endDate
   );
-  const monthly = mergeUsagePeriods(
-    selection.includeLocal ? localMonthly : [],
-    monthlyUsagePeriods(selectedImportedDaily)
-  );
+  const monthly = monthlyUsagePeriods(daily);
 
   let weekly = weeklyUsagePeriods(daily);
   let weeklyMethod: UsageSnapshot["weeklyMethod"] = "daily-derived";
@@ -167,7 +170,7 @@ export async function readUsageSnapshot({
     weekly,
   };
 
-  if (source === "all" && selection.includeLocal) {
+  if (selection.includeLocal && !startDate && !endDate) {
     const cliWeeklyRaw = await readOptionalCcusage(
       "weekly report",
       ccusageCommandArgs(source, "weekly", ["--last", "12"])
@@ -185,16 +188,19 @@ export async function readUsageSnapshot({
 
   const localDevice = localDeviceFrom(localDaily);
   const importedRaw = Object.fromEntries(
-    selection.selectedImportedDevices.map((item) => [
+    selectedImportedDevices.map((item) => [
       item.id,
       imported.raw[item.id],
     ])
   );
 
   return {
-    activeDeviceIds: selection.activeDeviceIds,
+    activeDeviceIds: [
+      ...(selection.includeLocal ? ["local"] : []),
+      ...selectedImportedDevices.map((item) => item.id),
+    ],
     daily,
-    dataPath: process.env.CODEX_HOME ?? "~/.codex",
+    dataPath: source === "codex" ? process.env.CODEX_HOME ?? "~/.codex" : "ccusage detected local sources",
     devices: [localDevice, ...imported.devices],
     generatedAt: new Date().toISOString(),
     mode: "live",
@@ -207,11 +213,7 @@ export async function readUsageSnapshot({
           skipped: "The local device was not selected.",
         },
       imported: importedRaw,
-      monthly:
-        localReports?.monthlyRaw ?? {
-          derivedFrom: "daily usage aggregation",
-          monthly: localMonthly,
-        },
+      monthly: { derivedFrom: "daily usage aggregation", monthly },
       sessions:
         localReports?.sessionsRaw ?? {
           skipped: "The local device was not selected.",

@@ -12,7 +12,12 @@ import {
   latestUsageLabel,
   usagePeriodsFrom,
 } from "./usage-domain";
-import type { UsageDevice, UsagePeriod } from "./usage-types";
+import {
+  usageSourceOptions,
+  type UsageDevice,
+  type UsagePeriod,
+  type UsageSource,
+} from "./usage-types";
 
 type ImportedUsage = {
   dailyByDevice: Record<string, UsagePeriod[]>;
@@ -63,6 +68,12 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
           ? (report as Record<string, unknown>)
           : {};
       const id = entry.name.replace(/\.json$/i, "");
+      const requestedSource = metadataString(metadata, "source");
+      const source: UsageSource = usageSourceOptions.some(
+        (option) => option.value === requestedSource
+      )
+        ? (requestedSource as UsageSource)
+        : "codex";
       dailyByDevice[id] = deviceDaily;
       devices.push({
         dailyEntries: deviceDaily.length,
@@ -70,6 +81,7 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
         kind: "imported",
         latestDate: latestUsageLabel(deviceDaily),
         name: metadataString(metadata, "deviceName") ?? deviceNameFromFile(entry.name),
+        source,
         updatedAt:
           metadataString(metadata, "exportedAt") ??
           metadataString(metadata, "generatedAt") ??

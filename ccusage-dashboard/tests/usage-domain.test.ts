@@ -105,6 +105,7 @@ test("limits device selection to known imports or the local aggregate", () => {
       kind: "imported",
       latestDate: "2026-08-01",
       name: "Jetson",
+      source: "codex",
       updatedAt: "2026-08-01T12:00:00.000Z",
     },
   ];
@@ -132,6 +133,7 @@ test("exports only active devices and produces safe names", () => {
         kind: "local",
         latestDate: "2026-08-01",
         name: "本机",
+        source: "all",
         updatedAt: "2026-08-01T12:00:00.000Z",
       },
       {
@@ -140,6 +142,7 @@ test("exports only active devices and produces safe names", () => {
         kind: "imported",
         latestDate: "2026-08-01",
         name: "Jetson",
+        source: "codex",
         updatedAt: "2026-08-01T12:00:00.000Z",
       },
     ],

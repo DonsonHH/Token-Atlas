@@ -10,7 +10,7 @@ import type {
 type UnknownRecord = Record<string, unknown>;
 type UsageModelTotals = UsageTotals & { isFallback?: boolean };
 
-const SUPPORTED_DAYS = new Set([7, 14, 30, 90]);
+const MAXIMUM_LOOKBACK_DAYS = 365;
 
 export function createEmptyTotals(): UsageTotals {
   return {
@@ -272,6 +272,18 @@ export function recentUsagePeriods(
   return daily.filter((period) => period.label >= cutoff);
 }
 
+export function usagePeriodsInRange(
+  periods: UsagePeriod[],
+  startDate?: string,
+  endDate?: string
+): UsagePeriod[] {
+  return periods.filter(
+    (period) =>
+      (!startDate || period.label >= startDate) &&
+      (!endDate || period.label <= endDate)
+  );
+}
+
 export function monthlyUsagePeriods(daily: UsagePeriod[]): UsagePeriod[] {
   const periods = new Map<string, UsagePeriod>();
 
@@ -332,7 +344,8 @@ export function deviceNameFromFile(fileName: string): string {
 }
 
 export function normalizeUsageDays(days: number): number {
-  return SUPPORTED_DAYS.has(days) ? days : 14;
+  if (!Number.isFinite(days)) return 14;
+  return Math.min(Math.max(Math.trunc(days), 1), MAXIMUM_LOOKBACK_DAYS);
 }
 
 export type UsageDeviceSelection = {

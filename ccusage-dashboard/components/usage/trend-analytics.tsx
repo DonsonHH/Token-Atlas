@@ -1,17 +1,12 @@
 "use client"
 
-import { Activity, CalendarDays, TrendingUp } from "lucide-react"
-import { useMemo, useState } from "react"
+import { BarChart3, CalendarDays, TrendingUp } from "lucide-react"
+import { type ReactNode, useMemo, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { DashboardPanel } from "@/components/dashboard-panel"
 import { Badge } from "@/components/ui/badge"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import {
   ChartContainer,
   ChartLegend,
@@ -20,14 +15,37 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatCost, formatShortDate, formatTokens } from "@/lib/format"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { formatCost, formatShortDate, formatTokenMillions, formatTokens } from "@/lib/format"
 import type { UsageSnapshot } from "@/lib/usage"
 
+type Granularity = "daily" | "monthly" | "weekly"
+type TrendGrouping = "models" | "total"
+type TrendMetric = "cacheRead" | "cost" | "inputOutput" | "tokens"
+
 const trendChartConfig = {
-  movingAverage: {
+  cacheRead: {
+    color: "var(--chart-2)",
+    label: "缓存读取",
+  },
+  cost: {
+    color: "var(--chart-5)",
+    label: "API 参考价",
+  },
+  inputOutput: {
     color: "var(--chart-4)",
-    label: "移动均值",
+    label: "请求 token",
+  },
+  movingAverage: {
+    color: "var(--chart-3)",
+    label: "7 日均值",
   },
   tokens: {
     color: "var(--chart-1)",
@@ -35,26 +53,33 @@ const trendChartConfig = {
   },
 } satisfies ChartConfig
 
-const cacheChartConfig = {
-  cacheRate: {
-    color: "var(--chart-2)",
-    label: "缓存复用率",
-  },
-} satisfies ChartConfig
-
 const weekdayChartConfig = {
   tokens: {
-    color: "var(--chart-5)",
+    color: "var(--chart-1)",
     label: "总 token",
   },
 } satisfies ChartConfig
 
-type Granularity = "daily" | "monthly" | "weekly"
+const modelColors = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "hsl(339 78% 55%)",
+]
 
 const granularityLabel: Record<Granularity, string> = {
   daily: "每日",
   monthly: "每月",
   weekly: "每周",
+}
+
+const metricLabel: Record<TrendMetric, string> = {
+  cacheRead: "缓存读取",
+  cost: "参考价",
+  inputOutput: "请求 token",
+  tokens: "总 token",
 }
 
 const weekdayLabels = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -63,6 +88,67 @@ function formatPeriodLabel(value: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatShortDate(value)
   if (/^\d{4}-\d{2}$/.test(value)) return value.slice(2).replace("-", "/")
   return value
+}
+
+function rawMetricValue(
+  period: UsageSnapshot["daily"][number],
+  metric: TrendMetric
+) {
+  if (metric === "cacheRead") return period.cacheReadTokens
+  if (metric === "cost") return period.costUSD
+  if (metric === "inputOutput") return period.inputTokens + period.outputTokens
+  return period.totalTokens
+}
+
+function chartMetricValue(value: number, metric: TrendMetric) {
+  return metric === "cost"
+    ? Number(value.toFixed(2))
+    : Number((value / 1_000_000).toFixed(2))
+}
+
+function formatMetricValue(value: number, metric: TrendMetric) {
+  return metric === "cost" ? formatCost(value) : formatTokens(value)
+}
+
+function SegmentedControl<T extends string>({
+  ariaLabel,
+  disabled,
+  onValueChange,
+  options,
+  value,
+}: {
+  ariaLabel: string
+  disabled?: Partial<Record<T, boolean>>
+  onValueChange: (value: T) => void
+  options: ReadonlyArray<{ label: string; value: T }>
+  value: T
+}) {
+  return (
+    <div aria-label={ariaLabel} className="inline-flex max-w-full items-center rounded-lg border bg-muted/35 p-1" role="group">
+      {options.map((option) => (
+        <Button
+          aria-pressed={value === option.value}
+          className="h-7 px-2.5 text-xs"
+          disabled={disabled?.[option.value]}
+          key={option.value}
+          onClick={() => onValueChange(option.value)}
+          size="sm"
+          variant={value === option.value ? "secondary" : "ghost"}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+function ControlGroup({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  )
 }
 
 function TrendAnalytics({
@@ -75,52 +161,98 @@ function TrendAnalytics({
   weekly: UsageSnapshot["weekly"]
 }) {
   const [granularity, setGranularity] = useState<Granularity>("daily")
+  const [metric, setMetric] = useState<TrendMetric>("tokens")
+  const [trendGrouping, setTrendGrouping] = useState<TrendGrouping>("total")
   const periods = { daily, monthly, weekly }[granularity]
-  const averageWindow = granularity === "daily" ? 7 : 4
+  const averageWindow = granularity === "daily" ? 7 : 0
+  const showMovingAverage = averageWindow > 0 && trendGrouping === "total" && metric !== "cost"
 
   const trendData = useMemo(
     () =>
       periods.map((period, index) => {
-        const start = Math.max(0, index - averageWindow + 1)
+        const start = averageWindow ? Math.max(0, index - averageWindow + 1) : index
         const window = periods.slice(start, index + 1)
-        const movingAverage =
-          window.reduce((sum, item) => sum + item.totalTokens, 0) /
-          Math.max(window.length, 1)
+        const movingAverage = window.length
+          ? window.reduce((sum, item) => sum + item.totalTokens, 0) / window.length
+          : 0
 
         return {
+          cacheRead: chartMetricValue(period.cacheReadTokens, "cacheRead"),
           cacheRate: period.totalTokens
             ? (period.cacheReadTokens / period.totalTokens) * 100
             : 0,
-          cost: period.costUSD,
+          cost: chartMetricValue(period.costUSD, "cost"),
           date: period.label,
+          inputOutput: chartMetricValue(period.inputTokens + period.outputTokens, "inputOutput"),
           label: formatPeriodLabel(period.label),
-          movingAverage: Number((movingAverage / 1_000_000).toFixed(2)),
-          tokens: Number((period.totalTokens / 1_000_000).toFixed(2)),
-          totalTokens: period.totalTokens,
+          movingAverage: chartMetricValue(movingAverage, "tokens"),
+          tokens: chartMetricValue(period.totalTokens, "tokens"),
         }
       }),
     [averageWindow, periods]
   )
 
-  const peakPeriod = useMemo(
+  const modelNames = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const period of periods) {
+      for (const [name, totalsForModel] of Object.entries(period.models)) {
+        totals.set(name, (totals.get(name) ?? 0) + totalsForModel.totalTokens)
+      }
+    }
+
+    return [...totals.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 5)
+      .map(([name]) => name)
+  }, [periods])
+
+  const modelTrendConfig = useMemo(
     () =>
-      trendData.reduce<(typeof trendData)[number] | null>(
-        (current, period) =>
-          !current || period.totalTokens > current.totalTokens ? period : current,
-        null
-      ),
-    [trendData]
+      Object.fromEntries(
+        modelNames.map((name, index) => [
+          `model${index}`,
+          { color: modelColors[index], label: name },
+        ])
+      ) satisfies ChartConfig,
+    [modelNames]
   )
 
-  const averageTokens = trendData.length
-    ? trendData.reduce((sum, period) => sum + period.totalTokens, 0) /
-      trendData.length
+  const modelTrendData = useMemo(
+    () =>
+      periods.map((period) => ({
+        date: period.label,
+        label: formatPeriodLabel(period.label),
+        ...Object.fromEntries(
+          modelNames.map((name, index) => [
+            `model${index}`,
+            Number(((period.models[name]?.totalTokens ?? 0) / 1_000_000).toFixed(2)),
+          ])
+        ),
+      })),
+    [modelNames, periods]
+  )
+
+  const rawValues = useMemo(
+    () => periods.map((period) => rawMetricValue(period, metric)),
+    [metric, periods]
+  )
+  const peakIndex = rawValues.reduce(
+    (current, value, index) => (value > (rawValues[current] ?? 0) ? index : current),
+    0
+  )
+  const peakPeriod = periods[peakIndex]
+  const averageMetric = rawValues.length
+    ? rawValues.reduce((sum, value) => sum + value, 0) / rawValues.length
     : 0
-  const averageCacheRate = trendData.length
-    ? trendData.reduce((sum, period) => sum + period.cacheRate, 0) /
-      trendData.length
+  const totalCost = periods.reduce((sum, period) => sum + period.costUSD, 0)
+  const averageCacheRate = periods.length
+    ? periods.reduce(
+        (sum, period) =>
+          sum + (period.totalTokens ? (period.cacheReadTokens / period.totalTokens) * 100 : 0),
+        0
+      ) / periods.length
     : 0
-  const totalCost = trendData.reduce((sum, period) => sum + period.cost, 0)
+
   const weekdayData = useMemo(() => {
     const buckets = weekdayLabels.map((label) => ({
       activeDays: 0,
@@ -131,7 +263,6 @@ function TrendAnalytics({
     for (const period of daily) {
       const date = new Date(`${period.label}T12:00:00`)
       if (Number.isNaN(date.getTime())) continue
-
       const weekdayIndex = (date.getDay() + 6) % 7
       buckets[weekdayIndex].activeDays += 1
       buckets[weekdayIndex].totalTokens += period.totalTokens
@@ -147,261 +278,297 @@ function TrendAnalytics({
       !current || weekday.totalTokens > current.totalTokens ? weekday : current,
     null
   )
-  const weekdayAverage = daily.length
-    ? daily.reduce((sum, period) => sum + period.totalTokens, 0) / daily.length
-    : 0
+  const weekdayTotal = weekdayData.reduce((sum, weekday) => sum + weekday.totalTokens, 0)
   const weekendShare = weekdayData.reduce(
     (sum, weekday, index) => sum + (index >= 5 ? weekday.totalTokens : 0),
     0
   )
-  const weekdayTotal = weekdayData.reduce((sum, weekday) => sum + weekday.totalTokens, 0)
+
+  function changeMetric(nextMetric: TrendMetric) {
+    setMetric(nextMetric)
+    if (nextMetric !== "tokens") setTrendGrouping("total")
+  }
 
   return (
-    <div className="space-y-7">
-      <section className="grid gap-7 2xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.85fr)]">
-        <Card className="bg-background/90 shadow-sm">
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 pt-5">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <TrendingUp className="size-4 text-muted-foreground" />
-              用量节奏
-            </CardTitle>
-            <CardDescription className="mt-1.5 text-sm">
-              在不同时间粒度下比较实际用量与移动均值。
-            </CardDescription>
-          </div>
-          <Tabs
-            className="contents"
-            onValueChange={(value) => {
-              if (value === "daily" || value === "weekly" || value === "monthly") {
-                setGranularity(value)
-              }
-            }}
-            value={granularity}
-          >
-            <TabsList className="h-9 border bg-muted/50 p-1">
-              {(Object.keys(granularityLabel) as Granularity[]).map((value) => (
-                <TabsTrigger className="px-2.5 text-xs" key={value} value={value}>
-                  {granularityLabel[value]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </CardHeader>
-        <CardContent>
-          {trendData.length ? (
-            <ChartContainer className="h-[330px] w-full" config={trendChartConfig}>
+    <div className="space-y-6">
+      <DashboardPanel
+        action={<Badge variant="outline">{periods.length} 个周期</Badge>}
+        description="先选择要回答的问题，再按时间或模型追溯变化来源。所有数值沿用顶部的设备、Agent 与日期范围。"
+        icon={<TrendingUp className="size-4" />}
+        title="用量是何时变化的？"
+        tone="blue"
+      >
+        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-3 border-b pb-5">
+          <ControlGroup label="粒度">
+            <SegmentedControl
+              ariaLabel="统计粒度"
+              onValueChange={setGranularity}
+              options={[
+                { label: "每日", value: "daily" },
+                { label: "每周", value: "weekly" },
+                { label: "每月", value: "monthly" },
+              ]}
+              value={granularity}
+            />
+          </ControlGroup>
+          <ControlGroup label="指标">
+            <SegmentedControl
+              ariaLabel="统计指标"
+              onValueChange={changeMetric}
+              options={[
+                { label: "总 token", value: "tokens" },
+                { label: "请求", value: "inputOutput" },
+                { label: "缓存", value: "cacheRead" },
+                { label: "参考价", value: "cost" },
+              ]}
+              value={metric}
+            />
+          </ControlGroup>
+          <ControlGroup label="拆分">
+            <SegmentedControl
+              ariaLabel="趋势分组方式"
+              disabled={{ models: metric !== "tokens" || !modelNames.length }}
+              onValueChange={setTrendGrouping}
+              options={[
+                { label: "总量", value: "total" },
+                { label: "按模型", value: "models" },
+              ]}
+              value={trendGrouping}
+            />
+          </ControlGroup>
+        </div>
+
+        {trendData.length && trendGrouping === "total" ? (
+          <div className="rounded-xl bg-muted/[0.16] px-1 pt-2">
+            <ChartContainer className="h-[340px] w-full" config={trendChartConfig}>
               <AreaChart
                 accessibilityLayer
                 data={trendData}
-                margin={{ bottom: 0, left: 8, right: 12, top: 12 }}
+                margin={{ bottom: 0, left: 10, right: 14, top: 12 }}
               >
                 <defs>
-                  <linearGradient id="fill-trend-tokens" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-tokens)" stopOpacity={0.36} />
-                    <stop offset="95%" stopColor="var(--color-tokens)" stopOpacity={0.02} />
+                  <linearGradient id="fill-trend-metric" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="5%" stopColor={`var(--color-${metric})`} stopOpacity={0.28} />
+                    <stop offset="95%" stopColor={`var(--color-${metric})`} stopOpacity={0.01} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  axisLine={false}
-                  dataKey="label"
-                  minTickGap={28}
-                  tickLine={false}
-                  tickMargin={10}
-                />
+                <XAxis axisLine={false} dataKey="label" minTickGap={28} tickLine={false} tickMargin={10} />
                 <YAxis
                   axisLine={false}
-                  tickFormatter={(value) => `${Number(value).toFixed(0)}M`}
+                  tickFormatter={(value) =>
+                    metric === "cost" ? `$${Number(value).toFixed(0)}` : formatTokenMillions(Number(value))
+                  }
                   tickLine={false}
-                  width={56}
+                  width={62}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value) => `${Number(value).toFixed(2)}M token`}
+                      formatter={(value) =>
+                        metric === "cost"
+                          ? formatCost(Number(value))
+                          : `${Number(value).toFixed(2)}M token`
+                      }
                       indicator="line"
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
                     />
                   }
                 />
-                <ChartLegend content={<ChartLegendContent />} />
                 <Area
-                  dataKey="tokens"
-                  fill="url(#fill-trend-tokens)"
+                  dataKey={metric}
+                  fill="url(#fill-trend-metric)"
                   fillOpacity={1}
-                  stroke="var(--color-tokens)"
+                  stroke={`var(--color-${metric})`}
                   strokeWidth={2}
                   type="monotone"
                 />
-                <Area
-                  dataKey="movingAverage"
-                  fill="transparent"
-                  stroke="var(--color-movingAverage)"
-                  strokeDasharray="5 5"
-                  strokeWidth={2}
-                  type="monotone"
-                />
+                {showMovingAverage ? (
+                  <Area
+                    dataKey="movingAverage"
+                    fill="transparent"
+                    stroke="var(--color-movingAverage)"
+                    strokeDasharray="5 5"
+                    strokeWidth={1.75}
+                    type="monotone"
+                  />
+                ) : null}
+                {showMovingAverage ? <ChartLegend content={<ChartLegendContent />} /> : null}
               </AreaChart>
             </ChartContainer>
-          ) : (
-            <div className="flex h-[330px] items-center justify-center text-sm text-muted-foreground">
-              当前筛选没有趋势数据。
-            </div>
-          )}
-        </CardContent>
-        </Card>
-
-        <Card className="bg-background/90 shadow-sm">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 pt-5">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Activity className="size-4 text-muted-foreground" />
-              缓存复用走势
-            </CardTitle>
-            <CardDescription className="mt-1.5 text-sm">缓存读取占总 token 的比例。</CardDescription>
           </div>
-          <Badge variant="outline">平均 {averageCacheRate.toFixed(1)}%</Badge>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {trendData.length ? (
-            <ChartContainer className="h-[205px] w-full" config={cacheChartConfig}>
+        ) : trendGrouping === "models" && modelNames.length ? (
+          <div className="rounded-xl bg-muted/[0.16] px-1 pt-2">
+            <ChartContainer className="h-[340px] w-full" config={modelTrendConfig}>
               <AreaChart
                 accessibilityLayer
-                data={trendData}
-                margin={{ bottom: 0, left: 8, right: 8, top: 10 }}
+                data={modelTrendData}
+                margin={{ bottom: 0, left: 10, right: 14, top: 12 }}
               >
-                <defs>
-                  <linearGradient id="fill-cache-rate" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-cacheRate)" stopOpacity={0.34} />
-                    <stop offset="95%" stopColor="var(--color-cacheRate)" stopOpacity={0.03} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  axisLine={false}
-                  dataKey="label"
-                  minTickGap={22}
-                  tickLine={false}
-                  tickMargin={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
-                  tickLine={false}
-                  width={50}
-                />
+                <XAxis axisLine={false} dataKey="label" minTickGap={28} tickLine={false} tickMargin={10} />
+                <YAxis axisLine={false} tickFormatter={(value) => formatTokenMillions(Number(value))} tickLine={false} width={62} />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value) => `${Number(value).toFixed(1)}%`}
+                      formatter={(value) => `${Number(value).toFixed(2)}M token`}
+                      indicator="dot"
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
                     />
                   }
                 />
-                <Area
-                  dataKey="cacheRate"
-                  fill="url(#fill-cache-rate)"
-                  fillOpacity={1}
-                  stroke="var(--color-cacheRate)"
-                  strokeWidth={2}
-                  type="monotone"
-                />
+                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-x-3 gap-y-1 text-xs" />} />
+                {modelNames.map((_, index) => (
+                  <Area
+                    dataKey={`model${index}`}
+                    fill={`var(--color-model${index})`}
+                    fillOpacity={0.38}
+                    key={index}
+                    stackId="models"
+                    stroke={`var(--color-model${index})`}
+                    strokeWidth={1.25}
+                    type="monotone"
+                  />
+                ))}
               </AreaChart>
             </ChartContainer>
-          ) : null}
-          <div className="grid grid-cols-2 gap-3 border-t pt-4 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground">{granularityLabel[granularity]}均值</p>
-              <p className="mt-1 font-semibold tabular-nums">{formatTokens(averageTokens)}</p>
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="text-xs text-muted-foreground">区间估算费用</p>
-              <p className="mt-1 truncate font-semibold tabular-nums" title={peakPeriod?.date}>
-                {formatCost(totalCost)}
-              </p>
-            </div>
           </div>
-          <div className="rounded-xl border bg-muted/20 p-3">
-            <p className="text-xs text-muted-foreground">峰值{granularityLabel[granularity]}</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {peakPeriod ? formatTokens(peakPeriod.totalTokens) : "—"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">{peakPeriod?.date ?? "暂无记录"}</p>
+        ) : (
+          <div className="flex h-[340px] items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+            当前范围没有可绘制的趋势数据。
           </div>
-        </CardContent>
-        </Card>
-      </section>
+        )}
 
-      <Card className="bg-background/90 shadow-sm">
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 pt-5">
+        <dl className="mt-5 grid gap-3 border-t pt-5 sm:grid-cols-2 sm:[&>div+div]:border-l sm:[&>div+div]:pl-4 lg:grid-cols-4">
           <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <CalendarDays className="size-4 text-muted-foreground" />
-              工作日用量分布
-            </CardTitle>
-            <CardDescription className="mt-1.5 text-sm">
-              将当前筛选中的每日真实日志按星期聚合，帮助发现固定的高负荷工作日。
-            </CardDescription>
+            <dt className="text-xs text-muted-foreground">{metricLabel[metric]}峰值</dt>
+            <dd className="mt-1 font-semibold tabular-nums">
+              {peakPeriod ? formatMetricValue(rawMetricValue(peakPeriod, metric), metric) : "—"}
+            </dd>
+            <p className="mt-1 text-xs text-muted-foreground">{peakPeriod?.label ?? "暂无记录"}</p>
           </div>
-          <Badge variant="outline">{daily.length} 个样本日</Badge>
-        </CardHeader>
-        <CardContent className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_15rem]">
-          <ChartContainer className="h-[230px] w-full" config={weekdayChartConfig}>
-            <BarChart
-              accessibilityLayer
-              data={weekdayData}
-              margin={{ bottom: 0, left: 8, right: 12, top: 10 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
-              <YAxis
-                axisLine={false}
-                tickFormatter={(value) => `${Number(value).toFixed(0)}M`}
-                tickLine={false}
-                width={56}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value) => `${Number(value).toFixed(2)}M token`}
-                    labelFormatter={(_, payload) => {
-                      const weekday = payload?.[0]?.payload
-                      return weekday
-                        ? `${weekday.label} · ${weekday.activeDays} 个活跃日`
-                        : ""
-                    }}
-                  />
-                }
-              />
-              <Bar dataKey="tokens" fill="var(--color-tokens)" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ChartContainer>
+          <div>
+            <dt className="text-xs text-muted-foreground">{granularityLabel[granularity]}均值</dt>
+            <dd className="mt-1 font-semibold tabular-nums">{formatMetricValue(averageMetric, metric)}</dd>
+            <p className="mt-1 text-xs text-muted-foreground">当前筛选范围</p>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">缓存复用占比</dt>
+            <dd className="mt-1 font-semibold tabular-nums">{averageCacheRate.toFixed(1)}%</dd>
+            <p className="mt-1 text-xs text-muted-foreground">按周期平均</p>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">区间 API 参考价</dt>
+            <dd className="mt-1 font-semibold tabular-nums">{formatCost(totalCost)}</dd>
+            <p className="mt-1 text-xs text-muted-foreground">本地定价估算</p>
+          </div>
+        </dl>
+      </DashboardPanel>
 
-          <div className="grid grid-cols-2 gap-3 border-t pt-4 text-sm sm:grid-cols-3 xl:grid-cols-1 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
-            <div>
-              <p className="text-xs text-muted-foreground">高负荷日</p>
-              <p className="mt-1 font-semibold">{weekdayPeak?.label ?? "—"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {weekdayPeak ? formatTokens(weekdayPeak.totalTokens) : "暂无记录"}
-              </p>
+      {daily.length >= 14 ? (
+        <DashboardPanel
+          action={<Badge variant="outline">{daily.length} 个活跃日</Badge>}
+          description="按星期归并所有活动日，用来识别稳定的高负荷日，而不是推断工作效率。"
+          icon={<BarChart3 className="size-4" />}
+          title="一周中的使用分布"
+        >
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+            <div className="rounded-xl bg-muted/[0.16] px-1 pt-2">
+              <ChartContainer className="h-[220px] w-full" config={weekdayChartConfig}>
+                <BarChart
+                  accessibilityLayer
+                  data={weekdayData}
+                  margin={{ bottom: 0, left: 10, right: 14, top: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
+                  <YAxis
+                    axisLine={false}
+                    tickFormatter={(value) => formatTokenMillions(Number(value))}
+                    tickLine={false}
+                    width={62}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => `${Number(value).toFixed(2)}M token`}
+                        labelFormatter={(_, payload) => {
+                          const weekday = payload?.[0]?.payload
+                          return weekday ? `${weekday.label} · ${weekday.activeDays} 个活跃日` : ""
+                        }}
+                      />
+                    }
+                  />
+                  <Bar dataKey="tokens" fill="var(--color-tokens)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">日均用量</p>
-              <p className="mt-1 font-semibold tabular-nums">{formatTokens(weekdayAverage)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">当前筛选范围</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">周末占比</p>
-              <p className="mt-1 font-semibold tabular-nums">
-                {weekdayTotal ? `${((weekendShare / weekdayTotal) * 100).toFixed(1)}%` : "—"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">周六与周日</p>
-            </div>
+            <dl className="grid grid-cols-2 gap-4 border-t pt-4 text-sm lg:grid-cols-1 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
+              <div>
+                <dt className="text-xs text-muted-foreground">最高负荷日</dt>
+                <dd className="mt-1 font-semibold">{weekdayPeak?.label ?? "—"}</dd>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {weekdayPeak ? formatTokens(weekdayPeak.totalTokens) : "暂无记录"}
+                </p>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">周末占比</dt>
+                <dd className="mt-1 font-semibold tabular-nums">
+                  {weekdayTotal ? `${((weekendShare / weekdayTotal) * 100).toFixed(1)}%` : "—"}
+                </dd>
+                <p className="mt-1 text-xs text-muted-foreground">周六与周日的合计</p>
+              </div>
+            </dl>
           </div>
-        </CardContent>
-      </Card>
+        </DashboardPanel>
+      ) : null}
+
+      <DashboardPanel
+        action={<Badge variant="outline">{periods.length} 条</Badge>}
+        description={`${granularityLabel[granularity]}口径与上方图表保持一致，可用于核对具体周期。`}
+        icon={<CalendarDays className="size-4" />}
+        title={`${granularityLabel[granularity]}明细`}
+      >
+        <div className="max-h-[28rem] overflow-auto rounded-xl border bg-background">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background">
+              <TableRow>
+                <TableHead>周期</TableHead>
+                <TableHead className="text-right">总 token</TableHead>
+                <TableHead className="text-right">缓存读取</TableHead>
+                <TableHead className="text-right">API 参考价</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {periods.length ? (
+                periods
+                  .slice()
+                  .reverse()
+                  .map((period) => (
+                    <TableRow key={period.label}>
+                      <TableCell className="font-medium">{period.label}</TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums">
+                        {formatTokens(period.totalTokens)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                        {formatTokens(period.cacheReadTokens)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                        {formatCost(period.costUSD)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+              ) : (
+                <TableRow>
+                  <TableCell className="h-24 text-center text-muted-foreground" colSpan={4}>
+                    没有可用记录。
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </DashboardPanel>
     </div>
   )
 }

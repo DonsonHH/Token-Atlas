@@ -5,6 +5,18 @@ export function formatTokens(value: number, digits = 1) {
   return value.toLocaleString("zh-CN")
 }
 
+/** Formats a token total as an exact whole number with digit grouping. */
+export function formatExactTokens(value: number) {
+  return Math.round(value).toLocaleString("zh-CN", {
+    maximumFractionDigits: 0,
+  })
+}
+
+/** Formats Recharts values that are stored in millions of tokens. */
+export function formatTokenMillions(value: number) {
+  return formatTokens(value * 1_000_000, 0)
+}
+
 export function formatCost(value: number) {
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
