@@ -1,17 +1,23 @@
-# Usage Console
+# Token Atlas
+
+<p align="center">
+  <img src="ccusage-dashboard/public/token-atlas-mark.svg" width="92" alt="Token Atlas logo">
+</p>
 
 <p align="center">
   一个以隐私为先的本地 ccusage 仪表盘，用于清晰分析 Codex 的 token、缓存、会话、模型、成本估算与多设备用量。
 </p>
 
 <p align="center">
-  <a href="https://github.com/DonsonHH/Usage-Console/actions"><img src="https://img.shields.io/github/actions/workflow/status/DonsonHH/Usage-Console/ci.yml?branch=main&label=checks" alt="Checks"></a>
+  <a href="https://github.com/DonsonHH/Token-Atlas/actions"><img src="https://img.shields.io/github/actions/workflow/status/DonsonHH/Token-Atlas/ci.yml?branch=main&label=checks" alt="Checks"></a>
   <img src="https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white" alt="Next.js">
   <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License">
 </p>
 
-Usage Console 只在你的机器上读取 ccusage 可解析的汇总数据。它将本机 Codex 日志与手动复制过来的 Ubuntu、Jetson 等设备 JSON 统一展示，同时避免把会话正文或个人使用数据上传到第三方服务。
+Token Atlas 是你的私有 Token 使用地图：它在本机汇总 ccusage 可解析的数据，将 Windows、Ubuntu、Jetson 等设备的 Codex 用量放进同一张图谱，同时避免把会话正文或个人使用数据上传到第三方服务。
+
+![Token Atlas 仪表盘预览](docs/preview.svg)
 
 ## 为什么使用它
 
@@ -42,8 +48,8 @@ Usage Console 只在你的机器上读取 ccusage 可解析的汇总数据。它
 - 需要分析本机数据时，本机应有可被 ccusage 读取的 Codex 日志。
 
 ~~~powershell
-git clone https://github.com/DonsonHH/Usage-Console.git
-cd Usage-Console\ccusage-dashboard
+git clone https://github.com/DonsonHH/Token-Atlas.git
+cd Token-Atlas\ccusage-dashboard
 
 corepack enable
 pnpm install
@@ -85,7 +91,7 @@ pnpm dlx ccusage@20.0.19 codex daily --json --offline --last 90 > jetson-codex-u
 把 JSON 文件复制到项目中的下列位置，再点击页面右上角“刷新”：
 
 ~~~powershell
-cd Usage-Console\ccusage-dashboard
+cd Token-Atlas\ccusage-dashboard
 New-Item -ItemType Directory -Force .\data\devices
 Copy-Item <复制过来的 JSON 文件路径> .\data\devices\jetson-orin-nano.json
 ~~~
@@ -102,9 +108,27 @@ Copy-Item <复制过来的 JSON 文件路径> .\data\devices\jetson-orin-nano.js
 
 <code>data/devices/*.json</code> 已被 Git 忽略，请不要将自己的用量数据提交到仓库。
 
+### 最快捷的双机导入
+
+仓库还提供两份辅助脚本，适合两台设备之间通过剪贴板传递 JSON：
+
+1. 将 <code>scripts/export-jetson-usage.sh</code> 复制到 Ubuntu / Jetson 后运行 <code>bash export-jetson-usage.sh</code>。它会导出最近 90 天、补充设备元数据，并自动打开 JSON 文件。
+2. 在 Jetson 中复制打开文件里的全部 JSON。
+3. 回到 Windows，在 <code>ccusage-dashboard</code> 目录运行下列命令。它会读取剪贴板、校验 JSON，并原子更新本机的导入文件：
+
+~~~powershell
+.\scripts\import-usage.ps1
+~~~
+
+如需从已有文件导入，可改用：
+
+~~~powershell
+.\scripts\import-usage.ps1 -InputPath C:\path\to\jetson-orin-nano.json
+~~~
+
 ## 数据范围与隐私
 
-Usage Console 处理的是 ccusage 输出中的聚合字段：日期、token、模型、会话目录、活跃时间和本地成本估算。
+Token Atlas 处理的是 ccusage 输出中的聚合字段：日期、token、模型、会话目录、活跃时间和本地成本估算。
 
 - 不上传、不展示、不复制会话正文。
 - 默认使用 <code>--offline</code>；浏览器只访问本地的 <code>/api/usage</code>。
@@ -213,4 +237,4 @@ pnpm exec ccusage codex daily --json --offline --last 14
 
 欢迎提交 Issue 或 Pull Request。提交前请在 <code>ccusage-dashboard</code> 目录执行 <code>pnpm verify</code>。
 
-本项目使用 [MIT License](LICENSE) 发布。首个公开版本为 [v0.1.0](https://github.com/DonsonHH/Usage-Console/releases/tag/v0.1.0)。
+本项目使用 [MIT License](LICENSE) 发布。最新公开版本见 [Releases](https://github.com/DonsonHH/Token-Atlas/releases)。

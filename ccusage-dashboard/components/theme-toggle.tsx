@@ -6,8 +6,8 @@ import { useSyncExternalStore } from "react"
 import { Switch, SwitchThumb } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
-const themeStorageKey = "usage-console-theme"
-const themeChangeEvent = "usage-console-theme-change"
+const themeStorageKey = "token-atlas-theme"
+const themeChangeEvent = "token-atlas-theme-change"
 
 function subscribeToTheme(callback: () => void) {
   window.addEventListener(themeChangeEvent, callback)

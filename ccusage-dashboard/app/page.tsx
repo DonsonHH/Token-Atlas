@@ -100,6 +100,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BrandMark } from "@/components/brand-mark";
 import { SessionAnalytics } from "@/components/usage/session-analytics";
 import { TrendAnalytics } from "@/components/usage/trend-analytics";
 import { UsageInsights } from "@/components/usage/usage-insights";
@@ -385,13 +386,13 @@ export default function Home() {
     <TooltipProvider delay={180}>
       <main className="min-h-svh bg-[radial-gradient(circle_at_70%_-10%,color-mix(in_oklab,var(--chart-1)_12%,transparent),transparent_32rem)] bg-muted/25 text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r bg-background/95 lg:flex">
-        <div className="flex h-[72px] items-center gap-3 border-b px-6">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <Gauge className="size-5" />
-          </div>
-          <div>
-            <p className="text-base font-semibold tracking-tight">Usage Console</p>
-            <p className="text-xs text-muted-foreground">本地 token 分析</p>
+        <div className="flex h-[72px] items-center border-b px-6">
+          <div className="flex items-center gap-3">
+            <BrandMark className="size-10 shrink-0" />
+            <div>
+              <p className="text-base font-semibold tracking-tight">Token Atlas</p>
+              <p className="text-xs text-muted-foreground">本地 token 情报图谱</p>
+            </div>
           </div>
         </div>
         <nav className="flex-1 space-y-6 px-4 py-6" aria-label="仪表盘导航">
@@ -441,7 +442,7 @@ export default function Home() {
             <Menu className="size-5" />
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold sm:text-lg">ccusage 使用分析</h1>
+            <h1 className="truncate text-base font-semibold sm:text-lg">Token Atlas</h1>
           </div>
           <Badge className="hidden gap-1.5 sm:flex" variant="secondary">
             <span className="size-1.5 rounded-full bg-emerald-500" />
@@ -467,7 +468,7 @@ export default function Home() {
             <SheetHeader className="border-b px-5 py-5 pr-12 text-left">
               <SheetTitle className="flex items-center gap-2">
                 <Sparkles className="size-4 text-primary" />
-                Usage Console
+                Token Atlas
               </SheetTitle>
               <SheetDescription>选择要查看的仪表盘模块。</SheetDescription>
             </SheetHeader>

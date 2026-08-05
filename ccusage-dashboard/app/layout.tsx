@@ -6,7 +6,7 @@ import "./globals.css";
 
 const themeScript = `
   try {
-    const savedTheme = localStorage.getItem("usage-console-theme");
+    const savedTheme = localStorage.getItem("token-atlas-theme");
     const isDark = savedTheme
       ? savedTheme === "dark"
       : window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -16,8 +16,11 @@ const themeScript = `
 `;
 
 export const metadata: Metadata = {
-  description: "基于本地 ccusage 日志的 Codex token 分析台。",
-  title: "Usage Console",
+  description: "Token Atlas 是用于汇总本机与多设备 Codex token 用量的私有分析台。",
+  icons: {
+    icon: "/token-atlas-mark.svg",
+  },
+  title: "Token Atlas",
 };
 
 export default function RootLayout({

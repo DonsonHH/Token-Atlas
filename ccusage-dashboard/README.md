@@ -1,4 +1,4 @@
-# Usage Console 应用目录
+# Token Atlas 应用目录
 
 这里是 Next.js 应用本体。完整的安装、Ubuntu / Jetson 导入、隐私说明、架构、验证和部署方案请查看仓库根目录的 [README](../README.md)。
 
