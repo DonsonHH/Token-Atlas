@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatCost, formatShortDate, formatTokenMillions, formatTokens } from "@/lib/format"
+import { getModelColor } from "@/lib/model-colors"
 import type { UsageSnapshot } from "@/lib/usage"
 
 type Granularity = "daily" | "monthly" | "weekly"
@@ -60,26 +61,10 @@ const weekdayChartConfig = {
   },
 } satisfies ChartConfig
 
-const modelColors = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "hsl(339 78% 55%)",
-]
-
 const granularityLabel: Record<Granularity, string> = {
   daily: "每日",
   monthly: "每月",
   weekly: "每周",
-}
-
-const metricLabel: Record<TrendMetric, string> = {
-  cacheRead: "缓存读取",
-  cost: "参考价",
-  inputOutput: "请求 token",
-  tokens: "总 token",
 }
 
 const weekdayLabels = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -104,10 +89,6 @@ function chartMetricValue(value: number, metric: TrendMetric) {
   return metric === "cost"
     ? Number(value.toFixed(2))
     : Number((value / 1_000_000).toFixed(2))
-}
-
-function formatMetricValue(value: number, metric: TrendMetric) {
-  return metric === "cost" ? formatCost(value) : formatTokens(value)
 }
 
 function SegmentedControl<T extends string>({
@@ -211,7 +192,7 @@ function TrendAnalytics({
       Object.fromEntries(
         modelNames.map((name, index) => [
           `model${index}`,
-          { color: modelColors[index], label: name },
+          { color: getModelColor(name), label: name },
         ])
       ) satisfies ChartConfig,
     [modelNames]
@@ -245,12 +226,32 @@ function TrendAnalytics({
     ? rawValues.reduce((sum, value) => sum + value, 0) / rawValues.length
     : 0
   const totalCost = periods.reduce((sum, period) => sum + period.costUSD, 0)
+  const totalInputOutput = periods.reduce(
+    (sum, period) => sum + period.inputTokens + period.outputTokens,
+    0
+  )
+  const activePeriods = periods.filter((period) => period.totalTokens > 0).length
   const averageCacheRate = periods.length
     ? periods.reduce(
         (sum, period) =>
           sum + (period.totalTokens ? (period.cacheReadTokens / period.totalTokens) * 100 : 0),
         0
       ) / periods.length
+    : 0
+  const rankedModelTotals = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const period of periods) {
+      for (const [name, model] of Object.entries(period.models)) {
+        totals.set(name, (totals.get(name) ?? 0) + model.totalTokens)
+      }
+    }
+    return [...totals.entries()].sort((left, right) => right[1] - left[1])
+  }, [periods])
+  const topModel = rankedModelTotals[0] ?? null
+  const modelsTotal = rankedModelTotals.reduce((sum, [, value]) => sum + value, 0)
+  const topModelShare = modelsTotal && topModel ? (topModel[1] / modelsTotal) * 100 : 0
+  const topTwoModelShare = modelsTotal
+    ? (rankedModelTotals.slice(0, 2).reduce((sum, [, value]) => sum + value, 0) / modelsTotal) * 100
     : 0
 
   const weekdayData = useMemo(() => {
@@ -289,13 +290,139 @@ function TrendAnalytics({
     if (nextMetric !== "tokens") setTrendGrouping("total")
   }
 
+  const trendSummary = (() => {
+    if (trendGrouping === "models") {
+      return [
+        {
+          detail: topModel ? formatTokens(topModel[1]) : "暂无记录",
+          label: "主力模型",
+          value: topModel?.[0] ?? "—",
+        },
+        {
+          detail: "主力模型占总 token",
+          label: "主力占比",
+          value: `${topModelShare.toFixed(1)}%`,
+        },
+        {
+          detail: "前两名模型合计",
+          label: "Top 2 集中度",
+          value: `${topTwoModelShare.toFixed(1)}%`,
+        },
+        {
+          detail: "当前筛选范围",
+          label: "已识别模型",
+          value: `${rankedModelTotals.length} 个`,
+        },
+      ]
+    }
+
+    if (metric === "cost") {
+      return [
+        {
+          detail: "本地 ccusage 定价估算",
+          label: "区间参考价",
+          value: formatCost(totalCost),
+        },
+        {
+          detail: peakPeriod?.label ?? "暂无记录",
+          label: "单周期峰值",
+          value: peakPeriod ? formatCost(rawMetricValue(peakPeriod, metric)) : "—",
+        },
+        {
+          detail: `${granularityLabel[granularity]}口径`,
+          label: "单周期均价",
+          value: formatCost(averageMetric),
+        },
+        {
+          detail: "有用量的周期数",
+          label: "活跃周期",
+          value: `${activePeriods} 个`,
+        },
+      ]
+    }
+
+    if (metric === "cacheRead") {
+      return [
+        {
+          detail: "当前筛选范围",
+          label: "缓存读取合计",
+          value: formatTokens(rawValues.reduce((sum, value) => sum + value, 0)),
+        },
+        {
+          detail: peakPeriod?.label ?? "暂无记录",
+          label: "单周期峰值",
+          value: peakPeriod ? formatTokens(rawMetricValue(peakPeriod, metric)) : "—",
+        },
+        {
+          detail: "各周期的算术平均",
+          label: "平均复用占比",
+          value: `${averageCacheRate.toFixed(1)}%`,
+        },
+        {
+          detail: "有用量的周期数",
+          label: "活跃周期",
+          value: `${activePeriods} 个`,
+        },
+      ]
+    }
+
+    if (metric === "inputOutput") {
+      const outputTokens = periods.reduce((sum, period) => sum + period.outputTokens, 0)
+      return [
+        {
+          detail: "输入与输出的合计",
+          label: "请求 token 合计",
+          value: formatTokens(totalInputOutput),
+        },
+        {
+          detail: peakPeriod?.label ?? "暂无记录",
+          label: "单周期峰值",
+          value: peakPeriod ? formatTokens(rawMetricValue(peakPeriod, metric)) : "—",
+        },
+        {
+          detail: "输出 ÷ 请求 token",
+          label: "输出占比",
+          value: totalInputOutput ? `${((outputTokens / totalInputOutput) * 100).toFixed(1)}%` : "—",
+        },
+        {
+          detail: `${granularityLabel[granularity]}口径`,
+          label: "单周期均值",
+          value: formatTokens(averageMetric),
+        },
+      ]
+    }
+
+    return [
+      {
+        detail: peakPeriod?.label ?? "暂无记录",
+        label: "总 token 峰值",
+        value: peakPeriod ? formatTokens(rawMetricValue(peakPeriod, metric)) : "—",
+      },
+      {
+        detail: `${granularityLabel[granularity]}口径`,
+        label: "单周期均值",
+        value: formatTokens(averageMetric),
+      },
+      {
+        detail: "缓存读取 ÷ 总 token",
+        label: "缓存复用占比",
+        value: `${averageCacheRate.toFixed(1)}%`,
+      },
+      {
+        detail: "本地 ccusage 定价估算",
+        label: "区间 API 参考价",
+        value: formatCost(totalCost),
+      },
+    ]
+  })()
+
   return (
     <div className="space-y-6">
       <DashboardPanel
         action={<Badge variant="outline">{periods.length} 个周期</Badge>}
-        description="先选择要回答的问题，再按时间或模型追溯变化来源。所有数值沿用顶部的设备、Agent 与日期范围。"
+        description="选择一个指标，再决定按总量或模型拆分。设备、Agent 与日期沿用顶部的全局范围。"
         icon={<TrendingUp className="size-4" />}
-        title="用量是何时变化的？"
+        title="用量趋势"
         tone="blue"
       >
         <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-3 border-b pb-5">
@@ -324,18 +451,20 @@ function TrendAnalytics({
               value={metric}
             />
           </ControlGroup>
-          <ControlGroup label="拆分">
-            <SegmentedControl
-              ariaLabel="趋势分组方式"
-              disabled={{ models: metric !== "tokens" || !modelNames.length }}
-              onValueChange={setTrendGrouping}
-              options={[
-                { label: "总量", value: "total" },
-                { label: "按模型", value: "models" },
-              ]}
-              value={trendGrouping}
-            />
-          </ControlGroup>
+          {metric === "tokens" ? (
+            <ControlGroup label="拆分">
+              <SegmentedControl
+                ariaLabel="趋势分组方式"
+                disabled={{ models: !modelNames.length }}
+                onValueChange={setTrendGrouping}
+                options={[
+                  { label: "总量", value: "total" },
+                  { label: "按模型", value: "models" },
+                ]}
+                value={trendGrouping}
+              />
+            </ControlGroup>
+          ) : null}
         </div>
 
         {trendData.length && trendGrouping === "total" ? (
@@ -440,28 +569,13 @@ function TrendAnalytics({
         )}
 
         <dl className="mt-5 grid gap-3 border-t pt-5 sm:grid-cols-2 sm:[&>div+div]:border-l sm:[&>div+div]:pl-4 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs text-muted-foreground">{metricLabel[metric]}峰值</dt>
-            <dd className="mt-1 font-semibold tabular-nums">
-              {peakPeriod ? formatMetricValue(rawMetricValue(peakPeriod, metric), metric) : "—"}
-            </dd>
-            <p className="mt-1 text-xs text-muted-foreground">{peakPeriod?.label ?? "暂无记录"}</p>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">{granularityLabel[granularity]}均值</dt>
-            <dd className="mt-1 font-semibold tabular-nums">{formatMetricValue(averageMetric, metric)}</dd>
-            <p className="mt-1 text-xs text-muted-foreground">当前筛选范围</p>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">缓存复用占比</dt>
-            <dd className="mt-1 font-semibold tabular-nums">{averageCacheRate.toFixed(1)}%</dd>
-            <p className="mt-1 text-xs text-muted-foreground">按周期平均</p>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">区间 API 参考价</dt>
-            <dd className="mt-1 font-semibold tabular-nums">{formatCost(totalCost)}</dd>
-            <p className="mt-1 text-xs text-muted-foreground">本地定价估算</p>
-          </div>
+          {trendSummary.map((item) => (
+            <div className="min-w-0" key={item.label}>
+              <dt className="text-xs text-muted-foreground">{item.label}</dt>
+              <dd className="mt-1 truncate font-semibold tabular-nums" title={item.value}>{item.value}</dd>
+              <p className="mt-1 truncate text-xs text-muted-foreground" title={item.detail}>{item.detail}</p>
+            </div>
+          ))}
         </dl>
       </DashboardPanel>
 

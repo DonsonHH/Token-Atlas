@@ -16,8 +16,8 @@ import {
   Layers3,
   Menu,
   RefreshCw,
+  Search,
   Server,
-  SlidersHorizontal,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
@@ -25,7 +25,6 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { BrandMark } from "@/components/brand-mark";
 import { DashboardPanel } from "@/components/dashboard-panel";
-import { DateRangePicker } from "@/components/date-range-picker";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Accordion,
@@ -35,6 +34,13 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -55,22 +61,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -94,6 +84,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SessionAnalytics } from "@/components/usage/session-analytics";
+import { ModelDistribution } from "@/components/usage/model-distribution";
+import { ScopeToolbar } from "@/components/usage/scope-toolbar";
 import { TrendAnalytics } from "@/components/usage/trend-analytics";
 import { useUsageSnapshot } from "@/hooks/use-usage-snapshot";
 import { downloadJsonFile } from "@/lib/download";
@@ -116,7 +108,7 @@ import type {
   UsageSource,
   UsageTotals,
 } from "@/lib/usage";
-import { usageSourceLabel, usageSourceOptions } from "@/lib/usage-types";
+import { usageSourceLabel } from "@/lib/usage-types";
 
 const chartConfig = {
   cacheRead: {
@@ -132,14 +124,6 @@ const chartConfig = {
     label: "总 token",
   },
 } satisfies ChartConfig;
-
-const modelColors = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
 
 const emptyTotals: UsageTotals = {
   cacheCreationTokens: 0,
@@ -157,6 +141,7 @@ const emptyModels: UsageSnapshot["models"] = [];
 
 type DateRangeMode = "7" | "14" | "30" | "90" | "custom";
 type Page = "overview" | "sessions" | "usage";
+type SessionSort = "activity" | "cost" | "tokens";
 
 const navigation: ReadonlyArray<{
   icon: typeof LayoutDashboard;
@@ -199,6 +184,11 @@ function customRangeDays(startDate: string, endDate: string) {
 
 function lookbackDaysFor(startDate: string) {
   return customRangeDays(startDate, dateInputValue(new Date()));
+}
+
+function sessionActivityTime(value: string | null) {
+  const timestamp = value ? Date.parse(value) : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function StatCard({
@@ -294,10 +284,8 @@ function DashboardSkeleton() {
           <Skeleton className="h-36 rounded-xl" key={index} />
         ))}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
-        <Skeleton className="h-[31rem] rounded-xl" />
-        <Skeleton className="h-[31rem] rounded-xl" />
-      </div>
+      <Skeleton className="h-[29rem] rounded-xl" />
+      <Skeleton className="h-[24rem] rounded-xl" />
     </div>
   );
 }
@@ -363,6 +351,9 @@ export default function Home() {
   const [chartMetric, setChartMetric] = useState<keyof typeof chartConfig>("tokens");
   const [showExactTotalTokens, setShowExactTotalTokens] = useState(true);
   const [sessionLimit, setSessionLimit] = useState(25);
+  const [sessionModel, setSessionModel] = useState("all");
+  const [sessionQuery, setSessionQuery] = useState("");
+  const [sessionSort, setSessionSort] = useState<SessionSort>("activity");
   const customStartDate = customRange.from ? dateInputValue(customRange.from) : "";
   const customEndDate = customRange.to ? dateInputValue(customRange.to) : customStartDate;
   const days = rangeMode === "custom" ? String(lookbackDaysFor(customStartDate)) : rangeMode;
@@ -401,27 +392,45 @@ export default function Home() {
       })),
     [daily]
   );
-  const topModel = models[0] ?? null;
-  const topModelShare = topModel && totals.totalTokens
-    ? (topModel.totalTokens / totals.totalTokens) * 100
-    : 0;
-  const topTwoModelShare = totals.totalTokens
-    ? (models.slice(0, 2).reduce((sum, model) => sum + model.totalTokens, 0) /
-        totals.totalTokens) *
-      100
-    : 0;
   const cacheReuseRate = totals.totalTokens
     ? ((totals.cacheReadTokens / totals.totalTokens) * 100).toFixed(1)
     : "0.0";
   const latestDay = daily.at(-1);
+  const averagePerActiveDay = daily.length ? totals.totalTokens / daily.length : 0;
   const latestDeviceUpdate = selectedDevices
     .map((device) => device.updatedAt)
     .filter((updatedAt): updatedAt is string => Boolean(updatedAt))
     .sort()
     .at(-1);
-  const visibleSessions = sessions.slice(0, sessionLimit);
+  const sessionModels = useMemo(
+    () => [...new Set(sessions.flatMap((session) => session.models))].sort((left, right) => left.localeCompare(right)),
+    [sessions]
+  );
+  const effectiveSessionModel = sessionModel === "all" || sessionModels.includes(sessionModel)
+    ? sessionModel
+    : "all";
+  const filteredSessions = useMemo(() => {
+    const query = sessionQuery.trim().toLocaleLowerCase();
+    return sessions
+      .filter((session) => {
+        if (effectiveSessionModel !== "all" && !session.models.includes(effectiveSessionModel)) return false;
+        if (!query) return true;
+        return [session.id, session.models.join(" "), session.project ?? ""]
+          .join(" ")
+          .toLocaleLowerCase()
+          .includes(query);
+      })
+      .slice()
+      .sort((left, right) => {
+        if (sessionSort === "tokens") return right.totalTokens - left.totalTokens;
+        if (sessionSort === "cost") return right.costUSD - left.costUSD;
+        return sessionActivityTime(right.lastActivity) - sessionActivityTime(left.lastActivity);
+      });
+  }, [effectiveSessionModel, sessionQuery, sessionSort, sessions]);
+  const visibleSessions = filteredSessions.slice(0, sessionLimit);
   const selectedExternalOnly =
     selectedDevices.length === 1 && selectedDevices[0]?.kind === "imported";
+  const selectedImportedCount = selectedDevices.filter((device) => device.kind === "imported").length;
 
   function downloadRawData() {
     if (!snapshot) return;
@@ -437,6 +446,16 @@ export default function Home() {
       usageExportFileName("usage-view", deviceFilter, snapshot.generatedAt),
       buildUsageViewExport(snapshot, source)
     );
+  }
+
+  function resetScope() {
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - 13);
+    setDeviceFilter("all");
+    setSource("all");
+    setRangeMode("14");
+    setCustomRange({ from: start, to: end });
   }
 
   function selectPage(nextPage: Page) {
@@ -492,12 +511,13 @@ export default function Home() {
             >
               <Menu className="size-5" />
             </Button>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 xl:hidden">
               <h1 className="truncate text-base font-semibold sm:text-lg">Token Atlas</h1>
             </div>
+            <div aria-hidden="true" className="hidden flex-1 xl:block" />
             <Badge className="hidden gap-1.5 sm:flex" variant="secondary">
               <span className="size-1.5 rounded-full bg-emerald-500" />
-              本地数据
+              {snapshot?.mode === "live" ? "数据已同步" : "等待读取"}
             </Badge>
             {selectedDevices.length > 1 ? (
               <Badge className="hidden gap-1.5 md:flex" variant="outline">
@@ -631,116 +651,36 @@ export default function Home() {
             </SheetContent>
           </Sheet>
 
-          <div className="mx-auto max-w-[1800px] px-5 py-8 sm:px-8 lg:px-10 xl:py-10">
-            <section aria-label="页面标题与全局范围" className="mb-8 space-y-4">
+          <div className="mx-auto max-w-[1800px] px-5 py-7 sm:px-8 lg:px-10 xl:py-8">
+            <section aria-label="页面标题与全局范围" className="mb-6 space-y-4">
               <div>
-                  <h2 className="text-3xl font-semibold tracking-[-0.04em]">{activePageCopy.title}</h2>
-                  <p className="mt-1.5 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-                    {page === "overview" && importedDevices.length
-                      ? "在同一视图中核对本机与外部设备的 ccusage 汇总。"
-                      : page === "overview"
-                        ? "统一查看本机已识别 Agent 的用量、模型结构与数据范围。"
-                        : activePageCopy.description}
-                  </p>
+                <h2 className="text-3xl font-semibold tracking-[-0.04em]">{activePageCopy.title}</h2>
+                <p className="mt-1.5 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
+                  {page === "overview" && importedDevices.length
+                    ? "依次查看规模、近期变化和模型构成；本机与外部设备按同一范围汇总。"
+                    : activePageCopy.description}
+                </p>
               </div>
 
-              <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4 2xl:flex-row 2xl:items-center">
-                <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between 2xl:block">
-                  <div className="flex shrink-0 items-center gap-2.5">
-                    <span className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      <SlidersHorizontal className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium">全局范围</p>
-                      <p className="text-xs text-muted-foreground">设备、来源和日期会同步用于全部分析</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground 2xl:mt-3">
-                    <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
-                      <span className="size-1.5 rounded-full bg-emerald-500" />
-                      {snapshot?.mode === "live" ? "数据已同步" : "等待读取"}
-                    </span>
-                    <span>更新：{formatDate(latestDeviceUpdate ?? null)}</span>
-                    <span>{selectedDevices.length} 台设备</span>
-                  </div>
-                </div>
-                <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-[minmax(13rem,1fr)_10rem_minmax(10rem,1fr)_auto]">
-                  <Select onValueChange={(value) => value && setDeviceFilter(value as UsageDeviceFilter)} value={deviceFilter}>
-                    <SelectTrigger aria-label="选择统计设备" className="h-10 w-full min-w-0 bg-background">
-                      <span className="shrink-0 text-xs font-medium text-muted-foreground">设备</span>
-                      <span className="min-w-0 flex-1 truncate text-left" title={selectedDeviceLabel}>{selectedDeviceLabel}</span>
-                    </SelectTrigger>
-                    <SelectContent align="end" className="w-[min(92vw,36rem)]">
-                      <SelectItem value="all">综合数据</SelectItem>
-                      <SelectItem value="local">本机数据</SelectItem>
-                      {devices.filter((device) => device.kind === "imported").map((device) => (
-                        <SelectItem key={device.id} value={device.id}>{device.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select onValueChange={(value) => value && setSource(value as UsageSource)} value={source}>
-                    <SelectTrigger aria-label="选择 Agent 来源" className="h-10 w-full min-w-0 bg-background">
-                      <span className="shrink-0 text-xs font-medium text-muted-foreground">来源</span>
-                      <span className="min-w-0 flex-1 truncate text-left">{usageSourceLabel(source)}</span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {usageSourceOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className={rangeMode === "custom" ? "grid grid-cols-1 gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]" : "w-full"}>
-                    <Select onValueChange={(value) => value && setRangeMode(value as DateRangeMode)} value={rangeMode}>
-                      <SelectTrigger aria-label="选择统计日期范围" className="h-10 w-full min-w-0 bg-background">
-                        <span className="shrink-0 text-xs font-medium text-muted-foreground">时间</span>
-                        <span className="min-w-0 flex-1 truncate text-left">{rangeMode === "custom" ? "自定义日期" : `最近 ${rangeMode} 天`}</span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="7">最近 7 天</SelectItem>
-                        <SelectItem value="14">最近 14 天</SelectItem>
-                        <SelectItem value="30">最近 30 天</SelectItem>
-                        <SelectItem value="90">最近 90 天</SelectItem>
-                        <SelectItem value="custom">自定义日期</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {rangeMode === "custom" ? (
-                      <DateRangePicker
-                        disabled={new Date()}
-                        onChange={(range) => {
-                          if (range?.from) setCustomRange(range);
-                        }}
-                        value={customRange}
-                      />
-                    ) : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button aria-label="打开数据审计" className="h-10 shrink-0 gap-2 px-3" onClick={() => setAuditOpen(true)} size="sm" variant="outline">
-                      <Database className="size-4" />
-                      <span>数据状态</span>
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button className="h-10 min-w-0 flex-1 gap-2 px-3" disabled={!snapshot} variant="outline" />}>
-                        <Download className="size-4" />
-                        导出
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-52">
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel>导出当前范围</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={downloadCurrentView}>
-                            <ArrowDownToLine className="size-4" />
-                            当前筛选汇总
-                          </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={downloadRawData}>
-                          <FileJson className="size-4" />
-                          原始 ccusage JSON
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </div>
+              <ScopeToolbar
+                customRange={customRange}
+                deviceFilter={deviceFilter}
+                devices={devices}
+                hasSnapshot={Boolean(snapshot)}
+                latestUpdateLabel={latestDeviceUpdate ? `更新：${formatDate(latestDeviceUpdate)}` : "暂无更新时间"}
+                onCustomRangeChange={setCustomRange}
+                onDataSource={() => setAuditOpen(true)}
+                onDeviceFilterChange={setDeviceFilter}
+                onDownloadRawData={downloadRawData}
+                onDownloadView={downloadCurrentView}
+                onRangeModeChange={setRangeMode}
+                onReset={resetScope}
+                onSourceChange={setSource}
+                rangeMode={rangeMode}
+                selectedDeviceLabel={selectedDeviceLabel}
+                selectedDevices={selectedDevices}
+                source={source}
+              />
             </section>
 
             {loading ? <DashboardSkeleton /> : null}
@@ -769,12 +709,12 @@ export default function Home() {
                         valueClickLabel={showExactTotalTokens ? "点击切换为紧凑单位显示" : "点击显示精确 token 数字"}
                       />
                       <StatCard
-                        detail={`当前范围覆盖 ${selectedDevices.length} 台设备 · ${usageSourceLabel(source)}`}
-                        hint="有日志记录的日期数量；用来判断当前统计窗口的覆盖程度。"
+                        detail={`${daily.length} 个活跃日 · 最近活动：${latestDay?.label ?? "暂无记录"}`}
+                        hint="按有日志记录的日期计算的平均 token 量；它不等于自然日平均值。"
                         icon={Server}
-                        label="活跃日"
+                        label="活跃日均"
                         tone="violet"
-                        value={`${daily.length} 天`}
+                        value={formatTokens(averagePerActiveDay)}
                       />
                       <StatCard
                         detail={`${formatTokens(totals.cacheReadTokens)} 缓存读取 · 占总 token 的比例`}
@@ -794,7 +734,7 @@ export default function Home() {
                       />
                     </section>
 
-                    <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
+                    <section className="space-y-6">
                       <DashboardPanel
                         action={<ChartMetricToggle onChange={setChartMetric} value={chartMetric} />}
                         description="按日查看当前范围的用量；切换指标可区分请求量与缓存读取的变化。"
@@ -806,7 +746,7 @@ export default function Home() {
                           <ContextMenuTrigger className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
                             {chartData.length ? (
                               <div className="rounded-xl bg-muted/[0.16] px-1 pt-2">
-                                <ChartContainer className="h-[350px] w-full" config={chartConfig}>
+                                <ChartContainer className="h-[280px] w-full sm:h-[310px]" config={chartConfig}>
                                   <AreaChart
                                     accessibilityLayer
                                     data={chartData}
@@ -841,7 +781,7 @@ export default function Home() {
                                 </ChartContainer>
                               </div>
                             ) : (
-                              <div className="flex h-[350px] items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                              <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground sm:h-[310px]">
                                 所选范围内没有日志记录。
                               </div>
                             )}
@@ -884,75 +824,19 @@ export default function Home() {
 
                       <DashboardPanel
                         action={<Badge variant="outline">{models.length} 个模型</Badge>}
-                        description="按总 token 排名。颜色只用来对应各模型的数据序列，不代表好坏。"
+                        description="用一张图看模型结构，再用表格核对 token、占比、请求与缓存。"
                         icon={<Layers3 className="size-4" />}
-                        title="哪些模型消耗最多？"
+                        title="模型分布"
                         tone="violet"
                       >
                         {models.length ? (
-                          <div className="space-y-5">
-                            <div className="rounded-xl bg-muted/[0.16] p-4">
-                              <p className="text-xs text-muted-foreground">主力模型</p>
-                              <div className="mt-1 flex items-baseline justify-between gap-3">
-                                <p className="min-w-0 truncate text-lg font-semibold" title={topModel?.name}>{topModel?.name ?? "—"}</p>
-                                <span className="shrink-0 text-sm font-medium tabular-nums text-violet-700 dark:text-violet-300">{topModelShare.toFixed(1)}%</span>
-                              </div>
-                              <p className="mt-1 text-xs text-muted-foreground">{topModel ? formatTokens(topModel.totalTokens) : "暂无记录"}</p>
-                            </div>
-                            <div className="space-y-4">
-                              {models.slice(0, 5).map((model, index) => {
-                                const share = totals.totalTokens ? (model.totalTokens / totals.totalTokens) * 100 : 0;
-                                return (
-                                  <div className="space-y-2" key={model.name}>
-                                    <div className="flex items-center justify-between gap-3 text-sm">
-                                      <div className="min-w-0">
-                                        <p className="flex items-center gap-2 truncate font-medium">
-                                          <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: modelColors[index % modelColors.length] }} />
-                                          <span className="truncate">{model.name}</span>
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">{formatTokens(model.totalTokens)}</p>
-                                      </div>
-                                      <span className="text-xs font-medium tabular-nums text-muted-foreground">{share.toFixed(1)}%</span>
-                                    </div>
-                                    <Progress aria-label={`${model.name} token 占比`} indicatorStyle={{ backgroundColor: modelColors[index % modelColors.length] }} value={share} />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/[0.16] px-3.5 py-3 text-sm">
-                              <div>
-                                <p className="text-xs text-muted-foreground">模型集中度</p>
-                                <p className="mt-1 font-semibold tabular-nums">Top 2 占 {topTwoModelShare.toFixed(1)}%</p>
-                              </div>
-                              <div className="border-l pl-4 text-right">
-                                <p className="text-xs text-muted-foreground">已识别模型</p>
-                                <p className="mt-1 font-semibold tabular-nums">{models.length} 个</p>
-                              </div>
-                            </div>
-                          </div>
+                          <ModelDistribution models={models} />
                         ) : (
                           <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">没有模型聚合数据。</div>
                         )}
                       </DashboardPanel>
                     </section>
 
-                    {importedDevices.length ? <section className="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                          <Check className="size-4" />
-                        </span>
-                        <div>
-                          <p className="font-medium">外部设备数据已汇总</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            已汇总 {selectedDevices.length} 台设备；外部 JSON 最近更新于 {formatDate(latestDeviceUpdate ?? null)}。
-                          </p>
-                        </div>
-                      </div>
-                      <Button className="shrink-0 gap-2" onClick={() => setAuditOpen(true)} size="sm" variant="outline">
-                        <FileJson className="size-4" />
-                        管理数据
-                      </Button>
-                    </section> : null}
                   </>
                 ) : null}
 
@@ -961,15 +845,69 @@ export default function Home() {
                 {page === "sessions" ? (
                   sessions.length ? (
                     <div className="space-y-6">
+                      <section className="flex flex-col gap-3 rounded-2xl border bg-muted/[0.16] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700 dark:text-blue-300">
+                            <History className="size-4" />
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold">会话明细仅来自本机</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {selectedImportedCount
+                                ? `已排除 ${selectedImportedCount} 台仅含每日聚合数据的外部设备；上方范围仍会影响概览与趋势。`
+                                : "ccusage 的会话明细仅在当前电脑解析，不会显示或上传外部设备的对话内容。"}
+                            </p>
+                          </div>
+                        </div>
+                        {deviceFilter !== "local" ? (
+                          <Button className="shrink-0" onClick={() => setDeviceFilter("local")} size="sm" variant="outline">
+                            仅看本机范围
+                          </Button>
+                        ) : (
+                          <Badge className="w-fit shrink-0" variant="secondary">当前本机范围</Badge>
+                        )}
+                      </section>
                       <SessionAnalytics sessions={sessions} />
                       <DashboardPanel
-                        action={<Badge variant="outline">{visibleSessions.length} / {sessions.length} 条</Badge>}
-                        description="仅显示当前本机可解析的会话明细；外部设备的导入格式只包含聚合数据。"
+                        action={<Badge variant="outline">{visibleSessions.length} / {filteredSessions.length} 条</Badge>}
+                        description="搜索、模型与排序只作用于本机已解析的会话；它们不会改变顶部的全局汇总。"
                         icon={<History className="size-4" />}
                         title="会话记录"
                       >
-                        <div className="mb-4 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-sm text-muted-foreground">按最近活动时间排序</p>
+                        <div className="mb-4 flex flex-col gap-3 border-b pb-4 xl:flex-row xl:items-center xl:justify-between">
+                          <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_minmax(10rem,0.8fr)_9rem]">
+                            <div className="relative min-w-0">
+                              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                aria-label="搜索会话"
+                                className="h-9 pl-9"
+                                onChange={(event) => setSessionQuery(event.target.value)}
+                                placeholder="搜索项目、模型或会话 ID"
+                                value={sessionQuery}
+                              />
+                            </div>
+                            <Select onValueChange={(value) => value && setSessionModel(value)} value={effectiveSessionModel}>
+                              <SelectTrigger aria-label="按模型筛选会话" className="h-9 w-full bg-background text-sm">
+                                <span className="min-w-0 flex-1 truncate text-left">{effectiveSessionModel === "all" ? "全部模型" : effectiveSessionModel}</span>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">全部模型</SelectItem>
+                                {sessionModels.map((model) => <SelectItem key={model} value={model}>{model}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Select onValueChange={(value) => value && setSessionSort(value as SessionSort)} value={sessionSort}>
+                              <SelectTrigger aria-label="会话排序方式" className="h-9 w-full bg-background text-sm">
+                                <span className="min-w-0 flex-1 truncate text-left">
+                                  {sessionSort === "activity" ? "最近活动" : sessionSort === "tokens" ? "总 token" : "参考价"}
+                                </span>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="activity">按最近活动</SelectItem>
+                                <SelectItem value="tokens">按总 token</SelectItem>
+                                <SelectItem value="cost">按参考价</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <div aria-label="选择显示的会话数量" className="inline-flex w-fit rounded-lg border bg-muted/35 p-1" role="group">
                             {[10, 25, 50].map((limit) => (
                               <Button
@@ -984,17 +922,20 @@ export default function Home() {
                               </Button>
                             ))}
                             <Button
-                              aria-pressed={sessionLimit >= sessions.length}
+                              aria-pressed={sessionLimit >= filteredSessions.length}
                               className="h-7 px-2.5 text-xs"
-                              onClick={() => setSessionLimit(sessions.length)}
+                              onClick={() => setSessionLimit(Number.MAX_SAFE_INTEGER)}
                               size="sm"
-                              variant={sessionLimit >= sessions.length ? "secondary" : "ghost"}
+                              variant={sessionLimit >= filteredSessions.length ? "secondary" : "ghost"}
                             >
                               全部
                             </Button>
                           </div>
                         </div>
-                        <SessionTable sessions={visibleSessions} />
+                        <SessionTable
+                          emptyMessage={sessions.length ? "没有匹配当前搜索或模型筛选的会话。" : "没有可用会话记录。"}
+                          sessions={visibleSessions}
+                        />
                       </DashboardPanel>
                     </div>
                   ) : (
@@ -1023,41 +964,78 @@ export default function Home() {
   );
 }
 
-function SessionTable({ sessions }: { sessions: UsageSnapshot["sessions"] }) {
+function SessionTable({
+  emptyMessage,
+  sessions,
+}: {
+  emptyMessage: string;
+  sessions: UsageSnapshot["sessions"];
+}) {
+  if (!sessions.length) {
+    return (
+      <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed px-5 text-center text-sm text-muted-foreground">
+        {emptyMessage}
+      </div>
+    );
+  }
+
   return (
-    <div className="max-h-[34rem] overflow-auto rounded-xl border bg-background">
-      <Table>
-        <TableHeader className="sticky top-0 bg-background">
-          <TableRow>
-            <TableHead>最后活动</TableHead>
-            <TableHead>模型</TableHead>
-            <TableHead>项目</TableHead>
-            <TableHead className="text-right">总 token</TableHead>
-            <TableHead className="text-right">缓存复用</TableHead>
-            <TableHead className="text-right">参考价</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sessions.length ? sessions.map((session) => (
-            <TableRow key={session.id}>
-              <TableCell className="whitespace-nowrap text-sm">{formatDate(session.lastActivity)}</TableCell>
-              <TableCell>
-                <div className="max-w-44 truncate text-sm" title={session.models.join(", ")}>{session.models.join(", ") || "—"}</div>
-              </TableCell>
-              <TableCell className="max-w-36 truncate text-sm text-muted-foreground" title={session.project ?? ""}>{formatProject(session.project)}</TableCell>
-              <TableCell className="text-right font-mono text-xs tabular-nums">{formatTokens(session.totalTokens)}</TableCell>
-              <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
-                {session.totalTokens ? `${((session.cacheReadTokens / session.totalTokens) * 100).toFixed(1)}%` : "—"}
-              </TableCell>
-              <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">{formatCost(session.costUSD)}</TableCell>
-            </TableRow>
-          )) : (
+    <>
+      <div className="space-y-2 md:hidden">
+        {sessions.map((session) => (
+          <article className="rounded-xl border bg-background p-3" key={session.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">最后活动</p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums">{formatDate(session.lastActivity)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">总 token</p>
+                <p className="mt-0.5 text-sm font-semibold tabular-nums">{formatTokens(session.totalTokens)}</p>
+              </div>
+            </div>
+            <div className="mt-3 border-t pt-3">
+              <p className="truncate text-sm font-medium" title={session.models.join(", ")}>{session.models.join(", ") || "未识别模型"}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground" title={session.project ?? ""}>{formatProject(session.project)}</p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+              <span className="text-muted-foreground">缓存复用 <strong className="ml-1 font-medium text-foreground tabular-nums">{session.totalTokens ? `${((session.cacheReadTokens / session.totalTokens) * 100).toFixed(1)}%` : "—"}</strong></span>
+              <span className="text-right text-muted-foreground">参考价 <strong className="ml-1 font-medium text-foreground tabular-nums">{formatCost(session.costUSD)}</strong></span>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="hidden max-h-[34rem] overflow-auto rounded-xl border bg-background md:block">
+        <Table>
+          <TableHeader className="sticky top-0 bg-background">
             <TableRow>
-              <TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>没有可用会话记录。</TableCell>
+              <TableHead>最后活动</TableHead>
+              <TableHead>模型</TableHead>
+              <TableHead>项目</TableHead>
+              <TableHead className="text-right">总 token</TableHead>
+              <TableHead className="text-right">缓存复用</TableHead>
+              <TableHead className="text-right">参考价</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {sessions.map((session) => (
+              <TableRow key={session.id}>
+                <TableCell className="whitespace-nowrap text-sm">{formatDate(session.lastActivity)}</TableCell>
+                <TableCell>
+                  <div className="max-w-44 truncate text-sm" title={session.models.join(", ")}>{session.models.join(", ") || "—"}</div>
+                </TableCell>
+                <TableCell className="max-w-36 truncate text-sm text-muted-foreground" title={session.project ?? ""}>{formatProject(session.project)}</TableCell>
+                <TableCell className="text-right font-mono text-xs tabular-nums">{formatTokens(session.totalTokens)}</TableCell>
+                <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                  {session.totalTokens ? `${((session.cacheReadTokens / session.totalTokens) * 100).toFixed(1)}%` : "—"}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">{formatCost(session.costUSD)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }

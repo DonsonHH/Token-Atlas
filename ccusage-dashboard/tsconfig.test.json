@@ -13,6 +13,7 @@
   "include": [
     "lib/usage-domain.ts",
     "lib/usage-export.ts",
+    "lib/model-colors.ts",
     "lib/usage-types.ts",
     "tests/**/*.ts"
   ],

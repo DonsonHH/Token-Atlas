@@ -13,6 +13,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { formatProject, formatTokenMillions } from "@/lib/format"
+import { getCategoricalColor } from "@/lib/model-colors"
 import type { UsageSnapshot } from "@/lib/usage"
 
 const projectChartConfig = {
@@ -35,14 +36,6 @@ const sizeChartConfig = {
     label: "会话数",
   },
 } satisfies ChartConfig
-
-const projectColors = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-]
 
 type ProjectSummary = {
   sessions: number
@@ -210,7 +203,7 @@ function SessionAnalytics({ sessions }: { sessions: UsageSnapshot["sessions"] })
                 />
                 <Bar dataKey="tokens" radius={[0, 6, 6, 0]}>
                   {projectData.map((project, index) => (
-                    <Cell fill={projectColors[index % projectColors.length]} key={project.source} />
+                    <Cell fill={getCategoricalColor(index)} key={project.source} />
                   ))}
                 </Bar>
               </BarChart>
