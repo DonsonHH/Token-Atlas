@@ -4,18 +4,18 @@
  * blue/yellow shades; a categorical breakdown needs much stronger separation.
  */
 const categoricalPalette = [
-  "oklch(0.67 0.2 255)",
-  "oklch(0.73 0.16 160)",
-  "oklch(0.76 0.17 70)",
-  "oklch(0.68 0.21 315)",
-  "oklch(0.69 0.19 25)",
-  "oklch(0.69 0.17 345)",
-  "oklch(0.74 0.17 125)",
-  "oklch(0.7 0.16 205)",
-  "oklch(0.69 0.18 285)",
-  "oklch(0.65 0.2 10)",
-  "oklch(0.7 0.15 185)",
-  "oklch(0.72 0.14 95)",
+  "var(--model-1)",
+  "var(--model-2)",
+  "var(--model-3)",
+  "var(--model-4)",
+  "var(--model-5)",
+  "var(--model-6)",
+  "var(--model-7)",
+  "var(--model-8)",
+  "var(--model-9)",
+  "var(--model-10)",
+  "var(--model-11)",
+  "var(--model-12)",
 ] as const
 
 const namedModelSlots: Record<string, number> = {

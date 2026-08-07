@@ -181,9 +181,13 @@ function TrendAnalytics({
       }
     }
 
+    // Select the five largest series, then render from smallest to largest.
+    // Recharts stacks areas in declaration order, so this keeps low-volume
+    // models as the foundation instead of burying them below the dominant one.
     return [...totals.entries()]
       .sort((left, right) => right[1] - left[1])
       .slice(0, 5)
+      .sort((left, right) => left[1] - right[1] || left[0].localeCompare(right[0]))
       .map(([name]) => name)
   }, [periods])
 
@@ -420,7 +424,7 @@ function TrendAnalytics({
     <div className="space-y-6">
       <DashboardPanel
         action={<Badge variant="outline">{periods.length} 个周期</Badge>}
-        description="选择一个指标，再决定按总量或模型拆分。设备、Agent 与日期沿用顶部的全局范围。"
+        description="选择一个指标，再决定按总量或模型拆分。按模型时展示总量前五模型，并从低用量到高用量逐层绘制。"
         icon={<TrendingUp className="size-4" />}
         title="用量趋势"
         tone="blue"
@@ -551,11 +555,11 @@ function TrendAnalytics({
                   <Area
                     dataKey={`model${index}`}
                     fill={`var(--color-model${index})`}
-                    fillOpacity={0.38}
+                    fillOpacity={0.26}
                     key={index}
                     stackId="models"
                     stroke={`var(--color-model${index})`}
-                    strokeWidth={1.25}
+                    strokeWidth={2.25}
                     type="monotone"
                   />
                 ))}
