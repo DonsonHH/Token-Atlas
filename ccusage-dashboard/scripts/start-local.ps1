@@ -4,7 +4,8 @@ param(
 )
 
 $runtimeRoot = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies"
-$node = Join-Path $runtimeRoot "node\bin\node.exe"
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+$node = if ($nodeCommand) { $nodeCommand.Source } else { Join-Path $runtimeRoot "node\bin\node.exe" }
 $next = Join-Path $PSScriptRoot "..\node_modules\next\dist\bin\next"
 
 if (-not (Test-Path -LiteralPath $node)) {

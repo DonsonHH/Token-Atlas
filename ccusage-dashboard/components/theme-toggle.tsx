@@ -1,67 +1,30 @@
-"use client"
+"use client";
 
-import { Moon, Sun } from "lucide-react"
-import { useSyncExternalStore } from "react"
+import { Moon, Sun } from "lucide-react";
+import { Switch, SwitchThumb } from "@/components/ui/switch";
+import { useTheme } from "@/hooks/use-theme";
+import { cn } from "@/lib/utils";
 
-import { Switch, SwitchThumb } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
-
-const themeStorageKey = "token-atlas-theme"
-const themeChangeEvent = "token-atlas-theme-change"
-
-function subscribeToTheme(callback: () => void) {
-  window.addEventListener(themeChangeEvent, callback)
-  window.addEventListener("storage", callback)
-
-  return () => {
-    window.removeEventListener(themeChangeEvent, callback)
-    window.removeEventListener("storage", callback)
-  }
-}
-
-function getThemeSnapshot() {
-  return document.documentElement.classList.contains("dark")
-}
-
-function ThemeToggle({ className }: { className?: string }) {
-  const isDark = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => false)
-
-  function setTheme(dark: boolean) {
-    document.documentElement.classList.toggle("dark", dark)
-    document.documentElement.style.colorScheme = dark ? "dark" : "light"
-    try {
-      window.localStorage.setItem(themeStorageKey, dark ? "dark" : "light")
-    } catch {
-      // The theme still works when browser storage is unavailable.
-    }
-    window.dispatchEvent(new Event(themeChangeEvent))
-  }
-
+export function ThemeToggle({ className }: { className?: string }) {
+  const { dark, setDark } = useTheme();
   return (
     <div
       className={cn(
-        "inline-flex shrink-0 items-center gap-2 rounded-lg border bg-background/70 px-2 py-1",
-        className
+        "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border bg-background px-2",
+        className,
       )}
     >
       <Sun className="size-3.5 text-muted-foreground" aria-hidden="true" />
       <Switch
         aria-label="切换黑白模式"
-        checked={isDark}
-        onCheckedChange={setTheme}
+        checked={dark}
+        onCheckedChange={setDark}
       >
         <SwitchThumb>
-          {isDark ? (
-            <Moon className="size-3 text-foreground" aria-hidden="true" />
-          ) : (
-            <Sun className="size-3 text-foreground" aria-hidden="true" />
-          )}
+          {dark ? <Moon className="size-3" /> : <Sun className="size-3" />}
         </SwitchThumb>
       </Switch>
       <Moon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-      <span className="sr-only">当前为{isDark ? "深色" : "浅色"}模式</span>
     </div>
-  )
+  );
 }
-
-export { ThemeToggle }

@@ -56,7 +56,7 @@ test("normalizes numeric fields and derives missing totals", () => {
       inputTokens: 10,
       outputTokens: 2,
       reasoningOutputTokens: 3,
-      totalTokens: 20,
+      totalTokens: 17,
     }
   );
 });
@@ -115,14 +115,14 @@ test("limits device selection to known imports or the local aggregate", () => {
     includeLocal: false,
     selectedImportedDevices: importedDevices,
   });
-  assert.deepEqual(selectUsageDevices("unknown", importedDevices).activeDeviceIds, [
-    "local",
-    "jetson",
-  ]);
+  assert.throws(() => selectUsageDevices("unknown", importedDevices), /设备不存在/);
 });
 
 test("exports only active devices and produces safe names", () => {
   const snapshot: UsageSnapshot = {
+    range: { start: "2026-08-01", end: "2026-08-04", days: 4, timezone: "Asia/Shanghai" },
+    warnings: [],
+    sessionStatus: "aggregate-only",
     activeDeviceIds: ["jetson"],
     daily: [],
     dataPath: "~/.codex",

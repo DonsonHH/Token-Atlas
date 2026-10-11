@@ -26,8 +26,10 @@ if command -v ccusage >/dev/null 2>&1; then
   ccusage "${command_args[@]}" > "$temporary_path"
 elif command -v pnpm >/dev/null 2>&1; then
   pnpm dlx ccusage@20.0.19 "${command_args[@]}" > "$temporary_path"
+elif command -v npx >/dev/null 2>&1; then
+  npx --yes ccusage@20.0.19 "${command_args[@]}" > "$temporary_path"
 else
-  echo "没有找到 ccusage 或 pnpm。请先安装其中之一。" >&2
+  echo "没有找到 ccusage、pnpm 或 npx。请先安装 Node.js（包含 npx）。" >&2
   exit 1
 fi
 
@@ -56,7 +58,7 @@ else
 fi
 
 echo "已生成：$output_path"
-echo "文件已包含最近 90 天汇总。请打开后复制全部 JSON，再到 Windows 运行 import-usage.ps1。"
+echo "文件已包含最近 90 天汇总。复制全部 JSON，在 Token Atlas 的数据源页面选择导入数据。"
 
 if command -v xdg-open >/dev/null 2>&1; then
   xdg-open "$output_path" >/dev/null 2>&1 || true

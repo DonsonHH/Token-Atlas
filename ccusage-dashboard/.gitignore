@@ -43,3 +43,6 @@ next-env.d.ts
 
 # External device exports contain personal usage data and stay local.
 /data/devices/*.json
+/data/devices/*.bak
+/data/devices/*.tmp
+/data/devices/*.lock

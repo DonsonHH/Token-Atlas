@@ -19,10 +19,11 @@ import {
   type UsageSource,
 } from "./usage-types";
 
-type ImportedUsage = {
+export type ImportedUsage = {
   dailyByDevice: Record<string, UsagePeriod[]>;
   devices: UsageDevice[];
   raw: Record<string, unknown>;
+  warnings: string[];
 };
 
 function metadataString(
@@ -34,9 +35,9 @@ function metadataString(
 }
 
 export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage {
-  const directory = join(rootDirectory, "data", "devices");
+  const directory = join(/*turbopackIgnore: true*/ rootDirectory, "data", "devices");
   if (!existsSync(directory)) {
-    return { dailyByDevice: {}, devices: [], raw: {} };
+    return { dailyByDevice: {}, devices: [], raw: {}, warnings: [] };
   }
 
   let entries: Dirent[];
@@ -44,21 +45,23 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
     entries = readdirSync(directory, { withFileTypes: true });
   } catch (error) {
     console.warn("Unable to read imported usage directory", error);
-    return { dailyByDevice: {}, devices: [], raw: {} };
+    return { dailyByDevice: {}, devices: [], raw: {}, warnings: ["无法读取外部设备目录。"] };
   }
 
   const dailyByDevice: Record<string, UsagePeriod[]> = {};
   const devices: UsageDevice[] = [];
   const raw: Record<string, unknown> = {};
+  const warnings: string[] = [];
 
   for (const entry of entries) {
     if (!entry.isFile() || !/\.json$/i.test(entry.name)) continue;
 
     try {
       const filePath = join(directory, entry.name);
-      const report = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+      const report = JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, "")) as unknown;
       const deviceDaily = usagePeriodsFrom(report, "daily");
       if (!deviceDaily.length) {
+        warnings.push(`${entry.name} 没有有效的按日记录。`);
         console.warn("Skipping usage import without daily entries: " + entry.name);
         continue;
       }
@@ -68,6 +71,10 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
           ? (report as Record<string, unknown>)
           : {};
       const id = entry.name.replace(/\.json$/i, "");
+      if (id === "local" || id === "all") {
+        warnings.push(`${entry.name} 的设备编号是保留名称。`);
+        continue;
+      }
       const requestedSource = metadataString(metadata, "source");
       const source: UsageSource = usageSourceOptions.some(
         (option) => option.value === requestedSource
@@ -86,12 +93,15 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
           metadataString(metadata, "exportedAt") ??
           metadataString(metadata, "generatedAt") ??
           statSync(filePath).mtime.toISOString(),
+        importedAt: statSync(filePath).mtime.toISOString(),
+        exportedAt: metadataString(metadata, "exportedAt") ?? metadataString(metadata, "generatedAt"),
       });
       raw[id] = report;
     } catch (error) {
+      warnings.push(`${entry.name} 无法解析，请重新导入。`);
       console.warn("Skipping invalid usage import: " + entry.name, error);
     }
   }
 
-  return { dailyByDevice, devices, raw };
+  return { dailyByDevice, devices, raw, warnings };
 }

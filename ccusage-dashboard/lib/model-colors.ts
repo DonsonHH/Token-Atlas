@@ -16,7 +16,7 @@ const categoricalPalette = [
   "var(--model-10)",
   "var(--model-11)",
   "var(--model-12)",
-] as const
+] as const;
 
 const namedModelSlots: Record<string, number> = {
   "claude-opus-5": 5,
@@ -29,37 +29,50 @@ const namedModelSlots: Record<string, number> = {
   "gpt-5.6-sol": 0,
   "gpt-5.6-terra": 1,
   "grok-4.5": 9,
-}
+};
 
 function stableHash(value: string) {
-  let hash = 2_166_136_261
+  let hash = 2_166_136_261;
 
   for (const character of value) {
-    hash ^= character.charCodeAt(0)
-    hash = Math.imul(hash, 16_777_619)
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16_777_619);
   }
 
-  return hash >>> 0
+  return hash >>> 0;
 }
 
 function getCategoricalColor(index: number) {
-  return categoricalPalette[Math.abs(index) % categoricalPalette.length]
+  return categoricalPalette[Math.abs(index) % categoricalPalette.length];
 }
 
-/**
- * Keeps a model's visual identity stable across every chart and table.
- *
- * Named common models get explicitly assigned, well-separated colour slots.
- * Other names use a stable hash instead of current rank, so their identity is
- * retained when filters or date ranges change.
- */
-function getModelColor(name: string) {
-  const normalizedName = name.trim().toLocaleLowerCase()
-  const namedSlot = namedModelSlots[normalizedName]
+const aggregateModelColor = "var(--muted-foreground)";
 
-  return getCategoricalColor(namedSlot ?? stableHash(normalizedName))
+/** Resolve hash collisions once against the whole displayed model catalogue. */
+function assignModelColors(names: string[]): Record<string, string> {
+  const sorted = [...new Set(names)].sort((a, b) => {
+    const aNamed = Object.hasOwn(namedModelSlots, a.trim().toLowerCase());
+    const bNamed = Object.hasOwn(namedModelSlots, b.trim().toLowerCase());
+    return Number(bNamed) - Number(aNamed) || a.localeCompare(b);
+  });
+  const used = new Set<number>();
+  return Object.fromEntries(
+    sorted.map((name) => {
+      const normalized = name.trim().toLowerCase();
+      const preferred = Object.hasOwn(namedModelSlots, normalized)
+        ? namedModelSlots[normalized]
+        : stableHash(normalized) % categoricalPalette.length;
+      let slot = preferred;
+      while (used.has(slot) && used.size < categoricalPalette.length)
+        slot = (slot + 1) % categoricalPalette.length;
+      const color =
+        used.size >= categoricalPalette.length
+          ? `oklch(var(--model-lightness) 0.13 ${(stableHash(normalized) * 137.508) % 360})`
+          : getCategoricalColor(slot);
+      used.add(slot);
+      return [name, color];
+    }),
+  );
 }
 
-const aggregateModelColor = "var(--muted-foreground)"
-
-export { aggregateModelColor, getCategoricalColor, getModelColor }
+export { aggregateModelColor, assignModelColors };

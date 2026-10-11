@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Notifications } from "@/components/notifications";
 
 import "./globals.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({
       </head>
       <body>
         <TooltipProvider>{children}</TooltipProvider>
+        <Notifications />
       </body>
     </html>
   );

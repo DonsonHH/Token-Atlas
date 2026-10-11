@@ -7,6 +7,7 @@ import type {
 export type UsageViewExport = Pick<
   UsageSnapshot,
   | "activeDeviceIds"
+  | "range"
   | "daily"
   | "generatedAt"
   | "models"
@@ -27,6 +28,7 @@ export function buildUsageViewExport(
   );
 
   return {
+    range: snapshot.range,
     activeDeviceIds: snapshot.activeDeviceIds,
     daily: snapshot.daily,
     devices,

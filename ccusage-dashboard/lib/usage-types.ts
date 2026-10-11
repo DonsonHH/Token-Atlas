@@ -1,3 +1,5 @@
+import type { UsageRange } from "./usage-range";
+
 export const usageSourceOptions = [
   { command: null, label: "全部已识别来源", value: "all" },
   { command: "claude", label: "Claude Code", value: "claude" },
@@ -32,6 +34,11 @@ export type UsageDevice = {
   name: string;
   source: UsageSource;
   updatedAt: string | null;
+  importedAt?: string | null;
+  exportedAt?: string | null;
+  status?: "ready" | "error" | "idle";
+  rangeTokens?: number;
+  rangeDays?: number;
 };
 
 export type UsageTotals = {
@@ -54,6 +61,7 @@ export type UsageSession = UsageTotals & {
   lastActivity: string | null;
   models: string[];
   project: string | null;
+  source?: UsageSource;
 };
 
 export type UsageModel = UsageTotals & {
@@ -62,6 +70,9 @@ export type UsageModel = UsageTotals & {
 };
 
 export type UsageSnapshot = {
+  range: UsageRange;
+  warnings: string[];
+  sessionStatus: "ready" | "unavailable" | "aggregate-only";
   activeDeviceIds: string[];
   daily: UsagePeriod[];
   dataPath: string;

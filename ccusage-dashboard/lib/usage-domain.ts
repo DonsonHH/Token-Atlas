@@ -6,11 +6,11 @@ import type {
   UsageSession,
   UsageTotals,
 } from "./usage-types";
+import { validDateKey } from "./usage-range";
+import { usageSourceOptions } from "./usage-types";
 
 type UnknownRecord = Record<string, unknown>;
 type UsageModelTotals = UsageTotals & { isFallback?: boolean };
-
-const MAXIMUM_LOOKBACK_DAYS = 365;
 
 export function createEmptyTotals(): UsageTotals {
   return {
@@ -61,11 +61,8 @@ export function usageTotalsFrom(value: unknown): UsageTotals {
     asNumber(metadata.reasoningOutputTokens);
   const totalTokens =
     asNumber(record.totalTokens) ||
-    inputTokens +
-      outputTokens +
-      cacheCreationTokens +
-      cacheReadTokens +
-      reasoningOutputTokens;
+    inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
+  // Reasoning is a subset of output in ccusage, not another additive bucket.
 
   return {
     cacheCreationTokens,
@@ -83,7 +80,7 @@ export function usageTotalsFrom(value: unknown): UsageTotals {
 
 export function addUsageTotals(
   left: UsageTotals,
-  right: UsageTotals
+  right: UsageTotals,
 ): UsageTotals {
   return {
     cacheCreationTokens: left.cacheCreationTokens + right.cacheCreationTokens,
@@ -110,7 +107,7 @@ function periodLabel(record: UnknownRecord): string {
 
 function modelMap(
   value: unknown,
-  fallback: unknown = []
+  fallback: unknown = [],
 ): Record<string, UsageModelTotals> {
   const directModels = Object.entries(asRecord(value));
 
@@ -126,11 +123,13 @@ function modelMap(
             isFallback: rawModel.isFallback === true,
           },
         ];
-      })
+      }),
     );
   }
 
-  const fallbackModels = asArray(value).length ? asArray(value) : asArray(fallback);
+  const fallbackModels = asArray(value).length
+    ? asArray(value)
+    : asArray(fallback);
   const models: Array<[string, UsageModelTotals]> = [];
 
   for (const model of fallbackModels) {
@@ -161,6 +160,7 @@ export function usagePeriodsFrom(report: unknown, key: string): UsagePeriod[] {
         models: modelMap(record.models, record.modelBreakdowns),
       };
     })
+    .filter((period) => key !== "daily" || validDateKey(period.label))
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
@@ -173,7 +173,7 @@ export function usageSessionsFrom(report: unknown): UsageSession[] {
       const record = asRecord(entry);
       const models = modelMap(record.models, record.modelBreakdowns);
       const reportedModels = asArray(record.modelsUsed).filter(
-        (model): model is string => typeof model === "string"
+        (model): model is string => typeof model === "string",
       );
       const metadata = asRecord(record.metadata);
 
@@ -186,8 +186,13 @@ export function usageSessionsFrom(report: unknown): UsageSession[] {
           "未命名会话",
         lastActivity:
           asString(record.lastActivity) ?? asString(metadata.lastActivity),
-        models: Object.keys(models).length ? Object.keys(models) : reportedModels,
+        models: Object.keys(models).length
+          ? Object.keys(models)
+          : reportedModels,
         project: asString(record.project) ?? asString(record.directory),
+        source: usageSourceOptions.find(
+          (source) => source.value === record.agent,
+        )?.value,
       };
     })
     .sort((left, right) => {
@@ -212,18 +217,18 @@ export function usageModelsFrom(periods: UsagePeriod[]): UsageModel[] {
   }
 
   return [...models.values()].sort(
-    (left, right) => right.totalTokens - left.totalTokens
+    (left, right) => right.totalTokens - left.totalTokens,
   );
 }
 
 function addModelMaps(
   left: UsagePeriod["models"],
-  right: UsagePeriod["models"]
+  right: UsagePeriod["models"],
 ): UsagePeriod["models"] {
   const combined = { ...left };
 
   for (const [name, usage] of Object.entries(right)) {
-    const previous = combined[name];
+    const previous = Object.hasOwn(combined, name) ? combined[name] : undefined;
     combined[name] = {
       ...(previous ? addUsageTotals(previous, usage) : usage),
       isFallback: Boolean(previous?.isFallback || usage.isFallback),
@@ -250,37 +255,25 @@ export function mergeUsagePeriods(...groups: UsagePeriod[][]): UsagePeriod[] {
           : {
               ...period,
               models: { ...period.models },
-            }
+            },
       );
     }
   }
 
   return [...periods.values()].sort((left, right) =>
-    left.label.localeCompare(right.label)
+    left.label.localeCompare(right.label),
   );
-}
-
-export function recentUsagePeriods(
-  daily: UsagePeriod[],
-  days: number
-): UsagePeriod[] {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - days + 1);
-  const cutoff = date.toISOString().slice(0, 10);
-
-  return daily.filter((period) => period.label >= cutoff);
 }
 
 export function usagePeriodsInRange(
   periods: UsagePeriod[],
   startDate?: string,
-  endDate?: string
+  endDate?: string,
 ): UsagePeriod[] {
   return periods.filter(
     (period) =>
       (!startDate || period.label >= startDate) &&
-      (!endDate || period.label <= endDate)
+      (!endDate || period.label <= endDate),
   );
 }
 
@@ -300,7 +293,7 @@ export function monthlyUsagePeriods(daily: UsagePeriod[]): UsagePeriod[] {
   }
 
   return [...periods.values()].sort((left, right) =>
-    left.label.localeCompare(right.label)
+    left.label.localeCompare(right.label),
   );
 }
 
@@ -330,22 +323,17 @@ export function weeklyUsagePeriods(daily: UsagePeriod[]): UsagePeriod[] {
   }
 
   return [...periods.values()].sort((left, right) =>
-    left.label.localeCompare(right.label)
+    left.label.localeCompare(right.label),
   );
 }
 
 export function latestUsageLabel(periods: UsagePeriod[]): string | null {
-  return periods.length ? periods.at(-1)?.label ?? null : null;
+  return periods.length ? (periods.at(-1)?.label ?? null) : null;
 }
 
 export function deviceNameFromFile(fileName: string): string {
   const stem = fileName.replace(/\.json$/i, "").replace(/[-_]+/g, " ");
   return stem.replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-export function normalizeUsageDays(days: number): number {
-  if (!Number.isFinite(days)) return 14;
-  return Math.min(Math.max(Math.trunc(days), 1), MAXIMUM_LOOKBACK_DAYS);
 }
 
 export type UsageDeviceSelection = {
@@ -356,12 +344,15 @@ export type UsageDeviceSelection = {
 
 export function selectUsageDevices(
   filter: UsageDeviceFilter,
-  importedDevices: UsageDevice[]
+  importedDevices: UsageDevice[],
 ): UsageDeviceSelection {
   const importedIds = new Set(importedDevices.map((device) => device.id));
-  const normalizedFilter =
-    filter === "local" || importedIds.has(filter) ? filter : "all";
-  const includeLocal = normalizedFilter === "all" || normalizedFilter === "local";
+  if (filter !== "all" && filter !== "local" && !importedIds.has(filter)) {
+    throw new Error("所选设备不存在，请重新选择。");
+  }
+  const normalizedFilter = filter;
+  const includeLocal =
+    normalizedFilter === "all" || normalizedFilter === "local";
   const selectedImportedDevices =
     normalizedFilter === "all"
       ? importedDevices

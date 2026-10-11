@@ -1,100 +1,101 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import type {
-  UsageDeviceFilter,
+  UsageDevice,
   UsageSnapshot,
   UsageSource,
-} from "@/lib/usage";
+} from "@/lib/usage-types";
 
-type UsageRequest = {
+export type UsageRequest = {
   days: string;
-  device: UsageDeviceFilter;
-  endDate?: string;
+  device: string;
   source: UsageSource;
   startDate?: string;
+  endDate?: string;
+  timezone: string;
+};
+type LoadState = {
+  key: string;
+  snapshot: UsageSnapshot | null;
+  loading: boolean;
+  error: string | null;
 };
 
-type UsageErrorPayload = {
-  error?: string;
-};
-
-function messageFromError(error: unknown): string {
-  return error instanceof Error ? error.message : "读取数据失败。";
-}
-
-async function fetchUsageSnapshot(
-  request: UsageRequest,
-  signal?: AbortSignal
-): Promise<UsageSnapshot> {
-  const query = new URLSearchParams({
+export function requestKey(request: UsageRequest) {
+  return new URLSearchParams({
     days: request.days,
     device: request.device,
     source: request.source,
-  });
-  if (request.startDate) query.set("start", request.startDate);
-  if (request.endDate) query.set("end", request.endDate);
-  const response = await fetch("/api/usage?" + query, {
-    cache: "no-store",
-    signal,
-  });
-  const payload = (await response.json()) as UsageSnapshot & UsageErrorPayload;
-
-  if (!response.ok) {
-    throw new Error(payload.error ?? "读取数据失败。");
-  }
-
-  return payload;
+    timezone: request.timezone,
+    ...(request.startDate ? { start: request.startDate } : {}),
+    ...(request.endDate ? { end: request.endDate } : {}),
+  }).toString();
 }
 
 export function useUsageSnapshot(request: UsageRequest) {
-  const { days, device, endDate, source, startDate } = request;
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [snapshot, setSnapshot] = useState<UsageSnapshot | null>(null);
-  const requestId = useRef(0);
+  const key = requestKey(request);
+  const [state, setState] = useState<LoadState>({
+    key: "",
+    snapshot: null,
+    loading: true,
+    error: null,
+  });
+  const [devices, setDevices] = useState<UsageDevice[]>([]);
+  const controller = useRef<AbortController | null>(null);
+  const sequence = useRef(0);
 
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      const currentRequestId = ++requestId.current;
-      setLoading(true);
-      setError(null);
-
-      try {
-        const nextSnapshot = await fetchUsageSnapshot(
-          { days, device, endDate, source, startDate },
-          signal
-        );
-        if (currentRequestId === requestId.current && !signal?.aborted) {
-          setSnapshot(nextSnapshot);
-        }
-      } catch (loadError) {
-        if (signal?.aborted || currentRequestId !== requestId.current) return;
-
-        setError(messageFromError(loadError));
-      } finally {
-        if (currentRequestId === requestId.current && !signal?.aborted) {
-          setLoading(false);
-        }
-      }
-    },
-    [days, device, endDate, source, startDate]
-  );
+  const load = useCallback(async () => {
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    const version = ++sequence.current;
+    setState((previous) => ({
+      key,
+      snapshot: previous.key === key ? previous.snapshot : null,
+      loading: true,
+      error: null,
+    }));
+    try {
+      const response = await fetch("/api/usage?" + key, {
+        signal: abort.signal,
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "读取失败，请重试。");
+      if (version !== sequence.current || abort.signal.aborted) return null;
+      const snapshot = payload as UsageSnapshot;
+      setDevices(snapshot.devices);
+      setState({ key, snapshot, loading: false, error: null });
+      return snapshot;
+    } catch (error) {
+      if (abort.signal.aborted || version !== sequence.current) return null;
+      const message =
+        error instanceof Error ? error.message : "读取失败，请重试。";
+      setState((previous) => ({
+        key,
+        snapshot: previous.key === key ? previous.snapshot : null,
+        loading: false,
+        error: message,
+      }));
+      throw new Error(message);
+    }
+  }, [key]);
 
   useEffect(() => {
-    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void load(controller.signal);
+      void load().catch(() => {});
     }, 0);
-
     return () => {
       window.clearTimeout(timer);
-      controller.abort();
+      controller.current?.abort();
     };
   }, [load]);
 
-  const refresh = useCallback(() => load(), [load]);
-
-  return { error, loading, refresh, snapshot };
+  // Never present an old scope under newly applied controls, even for one render.
+  const current =
+    state.key === key
+      ? state
+      : { key, snapshot: null, loading: true, error: null };
+  return { ...current, devices, refresh: load };
 }
