@@ -17,7 +17,7 @@ mkdir -p "$(dirname "$output_path")"
 temporary_path="$(mktemp)"
 trap 'rm -f "$temporary_path"' EXIT
 
-command_args=(daily --json --offline --last 90)
+command_args=(daily --json --offline)
 if [[ "$agent_source" != "all" ]]; then
   command_args=("$agent_source" "${command_args[@]}")
 fi
@@ -58,7 +58,7 @@ else
 fi
 
 echo "已生成：$output_path"
-echo "文件已包含最近 90 天汇总。复制全部 JSON，在 Token Atlas 的数据源页面选择导入数据。"
+echo "文件已包含全部可用日期的汇总。复制全部 JSON，在 Token Atlas 的数据源页面选择导入数据。"
 
 if command -v xdg-open >/dev/null 2>&1; then
   xdg-open "$output_path" >/dev/null 2>&1 || true

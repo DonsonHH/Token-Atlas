@@ -311,7 +311,11 @@ export function UsageWorkspace() {
                     label: item.value === "all" ? "全部 Agent" : item.label,
                   }))}
                 />
-                <RangeControl scope={state} onChange={update} />
+                <RangeControl
+                  scope={state}
+                  resolvedRange={snapshot?.range}
+                  onChange={update}
+                />
                 {scopeChanged ? (
                   <Button
                     aria-label="重置分析范围"

@@ -15,7 +15,7 @@ import type {
   UsageSnapshot,
   UsageSource,
 } from "./usage-types";
-import type { UsageRange } from "./usage-range";
+import { recordedUsageRange, type UsageRange } from "./usage-range";
 
 type SnapshotInput = {
   range: UsageRange;
@@ -49,7 +49,7 @@ export function assembleUsageSnapshot({
   const warnings = [...imports.warnings];
   const localDaily = usagePeriodsInRange(
     local?.daily ?? [],
-    range.start,
+    range.allTime ? undefined : range.start,
     range.end,
   );
   if (local?.error) warnings.push(local.error);
@@ -70,7 +70,7 @@ export function assembleUsageSnapshot({
     ...imports.devices.map((item) => {
       const rows = usagePeriodsInRange(
         imports.dailyByDevice[item.id] ?? [],
-        range.start,
+        range.allTime ? undefined : range.start,
         range.end,
       );
       return {
@@ -91,11 +91,15 @@ export function assembleUsageSnapshot({
   const importedDaily = compatible.flatMap((item) =>
     usagePeriodsInRange(
       imports.dailyByDevice[item.id] ?? [],
-      range.start,
+      range.allTime ? undefined : range.start,
       range.end,
     ),
   );
   const daily = mergeUsagePeriods(localDaily, importedDaily);
+  const resolvedRange = recordedUsageRange(
+    range,
+    daily.map((period) => period.label),
+  );
   const weekly = weeklyUsagePeriods(daily);
   const monthly = monthlyUsagePeriods(daily);
   const sessions = local?.sessions ?? [];
@@ -104,7 +108,7 @@ export function assembleUsageSnapshot({
     ...compatible.map((item) => item.id),
   ];
   return {
-    range,
+    range: resolvedRange,
     source,
     warnings,
     devices,
@@ -126,6 +130,6 @@ export function assembleUsageSnapshot({
     weeklyMethod: "daily-derived",
     totals: daily.reduce(addUsageTotals, createEmptyTotals()),
     models: usageModelsFrom(daily),
-    raw: { range, source, activeDeviceIds, daily, sessions },
+    raw: { range: resolvedRange, source, activeDeviceIds, daily, sessions },
   };
 }

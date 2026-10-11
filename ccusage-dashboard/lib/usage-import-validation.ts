@@ -58,6 +58,7 @@ export function validateUsageImport(
   )
     throw new Error("JSON 需要包含 1–10000 条 daily 记录。");
   const dates = new Set<string>();
+  const canonicalRows: Record<string, unknown>[] = [];
   for (const row of record.daily) {
     if (!row || typeof row !== "object" || Array.isArray(row))
       throw new Error("daily 记录格式无效。");
@@ -70,20 +71,32 @@ export function validateUsageImport(
     if (!numericFields.some((field) => row[field] !== undefined))
       throw new Error(`${date} 缺少用量字段。`);
     validateNumbers(row, date);
-    const models = Array.isArray(row.modelBreakdowns)
-      ? row.modelBreakdowns
-      : Array.isArray(row.models)
+    const models = [
+      ...(Array.isArray(row.modelBreakdowns) ? row.modelBreakdowns : []),
+      ...(Array.isArray(row.models)
         ? row.models
         : row.models && typeof row.models === "object"
           ? Object.values(row.models)
-          : [];
+          : []),
+    ];
     for (const model of models) {
       if (!model || typeof model !== "object" || Array.isArray(model))
         throw new Error(`${date} 的模型明细无效。`);
       validateNumbers(model as Record<string, unknown>, date);
     }
+    // The parser must use the same date validated above, even when a report
+    // also includes unrelated week/month labels.
+    canonicalRows.push({ ...row, date });
   }
-  const daily = usagePeriodsFrom(record, "daily");
+  const daily = usagePeriodsFrom({ daily: canonicalRows }, "daily");
+  for (const day of daily) {
+    const modelTotal = Object.values(day.models).reduce(
+      (sum, model) => sum + model.totalTokens,
+      0,
+    );
+    if (modelTotal > day.totalTokens)
+      throw new Error(`${day.label} 的模型用量超过当日总量，请检查报告口径。`);
+  }
   const reportedTime = record.exportedAt ?? record.generatedAt;
   const exportedAt =
     typeof reportedTime === "string" &&

@@ -11,6 +11,8 @@ Product copy is Chinese and deliberately brief.
 - The URL owns navigation and the applied device/source/date scope.
 - One inclusive date range feeds daily, weekly, monthly, session and export
   reports. Weeks/months are derived from the filtered daily data.
+- `days=all` removes the CLI lower date bound and resolves actual coverage from
+  selected records. It must never be implemented as a 90/366-day lookback.
 - Snapshot identity must match the applied scope. A failed request cannot
   relabel an old snapshot with a new scope.
 - Imported reports are daily aggregates, never session records. Mixed-agent

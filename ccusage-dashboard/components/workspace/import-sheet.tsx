@@ -75,18 +75,25 @@ export function ImportSheet({
       if (target === "new") {
         if (typeof parsed.deviceName === "string")
           setName(parsed.deviceName.slice(0, 100));
-        const reportedSource = usageSourceOptions.find(
-          (item) => item.value === parsed.source,
-        )?.value;
-        if (reportedSource) setSource(reportedSource);
       }
+      const reportedSource = usageSourceOptions.find(
+        (item) => item.value === parsed.source,
+      )?.value;
+      if (reportedSource) setSource(reportedSource);
     } catch {}
   }
   function chooseTarget(value: string) {
     setTarget(value);
     const device = devices.find((item) => item.id === value);
     setName(device?.name ?? "");
-    setSource(device?.source ?? "codex");
+    let reportedSource: UsageSource | undefined;
+    try {
+      const parsed = JSON.parse(content.replace(/^\uFEFF/, ""));
+      reportedSource = usageSourceOptions.find(
+        (item) => item.value === parsed.source,
+      )?.value;
+    } catch {}
+    setSource(reportedSource ?? device?.source ?? "codex");
   }
   async function submit() {
     if (!inspection.report || busy) return;

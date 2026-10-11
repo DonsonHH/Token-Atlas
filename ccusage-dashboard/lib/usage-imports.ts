@@ -1,9 +1,4 @@
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-} from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import { join } from "node:path";
 
@@ -18,6 +13,7 @@ import {
   type UsagePeriod,
   type UsageSource,
 } from "./usage-types";
+import { validateUsageImport } from "./usage-import-validation";
 
 export type ImportedUsage = {
   dailyByDevice: Record<string, UsagePeriod[]>;
@@ -28,14 +24,20 @@ export type ImportedUsage = {
 
 function metadataString(
   metadata: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | null {
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage {
-  const directory = join(/*turbopackIgnore: true*/ rootDirectory, "data", "devices");
+export function readImportedUsage(
+  rootDirectory = process.cwd(),
+): ImportedUsage {
+  const directory = join(
+    /*turbopackIgnore: true*/ rootDirectory,
+    "data",
+    "devices",
+  );
   if (!existsSync(directory)) {
     return { dailyByDevice: {}, devices: [], raw: {}, warnings: [] };
   }
@@ -45,7 +47,12 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
     entries = readdirSync(directory, { withFileTypes: true });
   } catch (error) {
     console.warn("Unable to read imported usage directory", error);
-    return { dailyByDevice: {}, devices: [], raw: {}, warnings: ["无法读取外部设备目录。"] };
+    return {
+      dailyByDevice: {},
+      devices: [],
+      raw: {},
+      warnings: ["无法读取外部设备目录。"],
+    };
   }
 
   const dailyByDevice: Record<string, UsagePeriod[]> = {};
@@ -58,14 +65,9 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
 
     try {
       const filePath = join(directory, entry.name);
-      const report = JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, "")) as unknown;
-      const deviceDaily = usagePeriodsFrom(report, "daily");
-      if (!deviceDaily.length) {
-        warnings.push(`${entry.name} 没有有效的按日记录。`);
-        console.warn("Skipping usage import without daily entries: " + entry.name);
-        continue;
-      }
-
+      const report = JSON.parse(
+        readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""),
+      ) as unknown;
       const metadata =
         typeof report === "object" && report !== null && !Array.isArray(report)
           ? (report as Record<string, unknown>)
@@ -77,24 +79,35 @@ export function readImportedUsage(rootDirectory = process.cwd()): ImportedUsage 
       }
       const requestedSource = metadataString(metadata, "source");
       const source: UsageSource = usageSourceOptions.some(
-        (option) => option.value === requestedSource
+        (option) => option.value === requestedSource,
       )
         ? (requestedSource as UsageSource)
         : "codex";
+      if (
+        requestedSource &&
+        !usageSourceOptions.some((option) => option.value === requestedSource)
+      ) {
+        throw new Error("Agent 来源无效。");
+      }
+      const normalized = validateUsageImport(
+        report,
+        metadataString(metadata, "deviceName") ??
+          deviceNameFromFile(entry.name),
+        source,
+      );
+      const deviceDaily = usagePeriodsFrom(normalized, "daily");
       dailyByDevice[id] = deviceDaily;
       devices.push({
         dailyEntries: deviceDaily.length,
         id,
         kind: "imported",
         latestDate: latestUsageLabel(deviceDaily),
-        name: metadataString(metadata, "deviceName") ?? deviceNameFromFile(entry.name),
+        name: normalized.deviceName,
         source,
         updatedAt:
-          metadataString(metadata, "exportedAt") ??
-          metadataString(metadata, "generatedAt") ??
-          statSync(filePath).mtime.toISOString(),
+          normalized.exportedAt ?? statSync(filePath).mtime.toISOString(),
         importedAt: statSync(filePath).mtime.toISOString(),
-        exportedAt: metadataString(metadata, "exportedAt") ?? metadataString(metadata, "generatedAt"),
+        exportedAt: normalized.exportedAt,
       });
       raw[id] = report;
     } catch (error) {

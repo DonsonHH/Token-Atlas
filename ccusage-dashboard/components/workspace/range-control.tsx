@@ -12,14 +12,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { dateKey, resolveUsageRange, validDateKey } from "@/lib/usage-range";
+import {
+  dateKey,
+  resolveUsageRange,
+  validDateKey,
+  type UsageRange,
+} from "@/lib/usage-range";
 import type { WorkspaceState } from "@/lib/workspace-state";
 
 export function RangeControl({
   scope,
+  resolvedRange,
   onChange,
 }: {
   scope: WorkspaceState;
+  resolvedRange?: UsageRange;
   onChange: (patch: Partial<WorkspaceState>) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,15 +37,20 @@ export function RangeControl({
   const label =
     scope.start && scope.end
       ? `${scope.start.replaceAll("-", "/")} – ${scope.end.slice(5).replace("-", "/")}`
-      : `最近 ${scope.days} 天`;
+      : scope.days === "all"
+        ? "全部日期"
+        : `最近 ${scope.days} 天`;
   function initialize(next: boolean) {
     if (next) {
       try {
-        const range = resolveUsageRange({
-          days: Number(scope.days),
-          start: scope.start,
-          end: scope.end,
-        });
+        const range =
+          scope.days === "all" && resolvedRange
+            ? resolvedRange
+            : resolveUsageRange({
+                days: scope.days === "all" ? "all" : Number(scope.days),
+                start: scope.start,
+                end: scope.end,
+              });
         setFrom(range.start);
         setTo(range.end);
         setMonth(new Date(range.start + "T12:00:00"));
@@ -55,7 +67,7 @@ export function RangeControl({
   function apply() {
     try {
       const range = resolveUsageRange({ start: from, end: to });
-      onChange({ start: range.start, end: range.end });
+      onChange({ days: "14", start: range.start, end: range.end });
       setOpen(false);
     } catch (error) {
       setError(error instanceof Error ? error.message : "请选择有效日期。");
@@ -87,7 +99,7 @@ export function RangeControl({
         className="max-h-[85svh] w-[min(92vw,24rem)] overflow-auto p-4"
       >
         <div className="grid grid-cols-4 gap-1">
-          {[7, 14, 30, 90].map((days) => (
+          {([7, 14, 30, "all"] as const).map((days) => (
             <Button
               key={days}
               variant="secondary"
@@ -101,7 +113,7 @@ export function RangeControl({
                 setOpen(false);
               }}
             >
-              {days} 天
+              {days === "all" ? "全部日期" : `${days} 天`}
             </Button>
           ))}
         </div>

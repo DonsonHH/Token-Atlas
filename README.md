@@ -34,13 +34,13 @@ Token Atlas 只在你的机器上读取 ccusage 的离线汇总。它适合同�
 
 Token Atlas 使用 ccusage 的离线报告。界面可按已识别来源筛选 Claude Code、OpenAI Codex、OpenCode、Amp、Droid、Codebuff、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI 与 Gemini CLI。
 
-可用来源取决于本机实际日志。外部导入默认标记为 Codex，也可在导入时显式指定真实来源；没有稳定来源字段时，应用不会猜测或伪造分类。
+可用来源取决于本机实际日志。导入表单和命令行脚本优先使用报告中已有的来源；没有来源元数据的旧报告默认按 Codex 处理，导入其他 Agent 时请显式选择真实来源。
 
 ## 核心功能
 
 - 概览依次展示四个紧凑 KPI、每日面积图与模型环图 / 数据表。
 - 总 token 默认显示完整整数；点击数字即可在精确数值与 `4.4B` 这类紧凑单位之间切换。
-- 日期支持 7 / 14 / 30 / 90 天和自定义范围（单次最多 366 天，可选择历史窗口）；确认后统一应用。
+- 日期支持 7 / 14 / 30 天、全部日期和自定义范围；全部日期读取所有可用历史，自定义窗口单次最多 366 天。
 - 平滑面积图保留前五模型、其他模型和未归类用量，从少到多堆叠；点击图例可以突出一个系列。
 - 周、月汇总与会话读取使用同一日期范围；7 日均值按所选指标和连续自然日计算。
 - 页面、日期、设备、Agent 和分析选项保存在 URL 中，刷新或前进 / 后退可恢复。
@@ -89,7 +89,7 @@ pnpm dev
 bash export-jetson-usage.sh
 ```
 
-它默认导出最近 90 天的 Codex 数据并打开文件。若系统没有 `ccusage`，脚本会依次尝试 `pnpm dlx`、`npx`；只安装 Node.js 的 Ubuntu 也可以使用。
+它默认导出全部可用日期的 Codex 数据并打开文件。若系统没有 `ccusage`，脚本会依次尝试 `pnpm dlx`、`npx`；只安装 Node.js 的 Ubuntu 也可以使用。
 
 如需指定文件、设备名称或来源：
 
@@ -170,7 +170,7 @@ flowchart LR
 | `pnpm build` | 构建生产版本 |
 | `pnpm verify` | 依次运行 lint、typecheck、test 和 build |
 
-GitHub Actions 会在推送与 Pull Request 时执行同样的验证。
+GitHub Actions 会在主分支推送与 Pull Request 时，在 Windows 和 Ubuntu 上执行同样的验证。
 
 ## 部署
 

@@ -9,7 +9,7 @@ $node = if ($nodeCommand) { $nodeCommand.Source } else { Join-Path $runtimeRoot 
 $next = Join-Path $PSScriptRoot "..\node_modules\next\dist\bin\next"
 
 if (-not (Test-Path -LiteralPath $node)) {
-  Write-Error "未找到可用的 Node.js。请安装 Node.js 20+ 后运行 pnpm dev。"
+  Write-Error "未找到可用的 Node.js。请安装 Node.js 20.9+ 后运行 pnpm dev。"
   exit 1
 }
 
@@ -18,4 +18,10 @@ if (-not (Test-Path -LiteralPath $next)) {
   exit 1
 }
 
-& $node $next dev --port $Port
+$dashboardRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+Push-Location -LiteralPath $dashboardRoot
+try {
+  & $node $next dev --port $Port
+} finally {
+  Pop-Location
+}

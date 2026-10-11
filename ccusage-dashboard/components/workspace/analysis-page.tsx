@@ -37,7 +37,7 @@ export function AnalysisPage({
   state: WorkspaceState;
   onChange: (patch: Partial<WorkspaceState>) => void;
 }) {
-  const [tableLimit, setTableLimit] = useState(10);
+  const [expanded, setExpanded] = useState(false);
   const periods = useMemo(
     () => calendarPeriods(snapshot.daily, snapshot.range, state.grain),
     [snapshot.daily, snapshot.range, state.grain],
@@ -170,7 +170,7 @@ export function AnalysisPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {details.slice(0, tableLimit).map((period) => (
+            {(expanded ? details : details.slice(0, 10)).map((period) => (
               <TableRow key={period.label}>
                 <TableCell className="py-3.5 tabular-nums">
                   {period.label}
@@ -194,9 +194,9 @@ export function AnalysisPage({
           <Button
             className="mt-3 w-full text-xs"
             variant="ghost"
-            onClick={() => setTableLimit(tableLimit === 10 ? 366 : 10)}
+            onClick={() => setExpanded(!expanded)}
           >
-            {tableLimit === 10 ? `查看全部 ${details.length} 个周期` : "收起"}
+            {!expanded ? `查看全部 ${details.length} 个周期` : "收起"}
           </Button>
         ) : null}
       </DashboardPanel>

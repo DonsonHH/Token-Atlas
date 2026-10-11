@@ -75,3 +75,30 @@ model filters affect the session table and its export, not global totals.
   report zero. There is no per-model actual bill or fabricated request count.
 - This is a local application. Same-origin import protection is not a substitute
   for authentication if deploying outside a trusted machine/network.
+
+## v0.3.0 follow-up review
+
+The local redesign commit was reviewed against GitHub `main`, the existing
+v0.2.2 release, repository metadata and successful historical CI runs.
+
+| Before | After | Why |
+| --- | --- | --- |
+| Last preset and Jetson export capped history at 90 days | `days=all` omits the lower CLI date bound; export script includes complete history | Actual all-history reporting, including records older than one year |
+| “Show all” rendered at most 366 detail rows | Expanded table uses every returned period | No hidden cap after selecting all history |
+| Date/model validation could differ from normalization when multiple fields existed | Canonical date and validation of both model representations | Reject malformed reports before they reach charts |
+| File imports bypassed web-import validation | Existing/manual files use the same validator with visible warnings | Consistent handling across import paths |
+| PowerShell imports overwrote source metadata and invented export timestamps | Preserve declared source and timestamp, normalize source spelling | Correct multi-Agent classification and freshness |
+| CLI update had no lock/backup; launcher depended on caller CWD | Shared per-device lock, last-version backup, explicit app working directory | Safer updates and reliable desktop launching |
+| Repository description and CI name still described Codex/Usage Console | Token Atlas multi-Agent description; Windows + Ubuntu CI | Repository metadata and verification match the product |
+
+Regression coverage includes multi-year history, source-filtered history bounds,
+empty history, URL round trips and conflicting import fields. All-history uses
+only records retained locally or already imported; it cannot recover records
+that were omitted by a previous 90-day export.
+
+Local verification passed with 17 regression tests, lint, type checking and a
+production build. Real all-history data resolved to 2026-05-16 through
+2026-10-11; Jetson-only history resolved independently to 2026-06-30 through
+2026-08-22. Desktop/mobile checks confirmed the new preset, no 90-day button,
+and switching from all history back to a custom range. A CLI import fixture
+also confirmed source/name preservation, absent export timestamps and backups.

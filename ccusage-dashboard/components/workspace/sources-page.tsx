@@ -102,7 +102,9 @@ export function SourcesPage({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">所选日期内</dt>
+                  <dt className="text-muted-foreground">
+                    {snapshot.range.allTime ? "全部历史" : "所选日期内"}
+                  </dt>
                   <dd className="mt-1.5 font-medium tabular-nums">
                     {device.status === "idle"
                       ? "未读取"

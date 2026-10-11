@@ -1,8 +1,10 @@
-name: Verify Usage Console
+name: Verify Token Atlas
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,7 +12,11 @@ permissions:
 jobs:
   verify:
     name: Lint, typecheck, test, and build
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: ccusage-dashboard

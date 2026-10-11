@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
       chunks.push(value);
     }
     const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      throw new Error("需要有效的导入请求。");
     if (typeof body.id !== "string" || !validDeviceId(body.id))
       throw new Error(
         "设备编号只能包含小写字母、数字、短横线或下划线，且不能为 local / all。",

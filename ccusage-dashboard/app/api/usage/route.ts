@@ -14,7 +14,12 @@ export async function GET(request: NextRequest) {
     )?.value;
     if (!source) throw new Error("Agent 来源无效。");
     const range = resolveUsageRange({
-      days: query.has("days") ? Number(query.get("days")) : 14,
+      days:
+        query.get("days") === "all"
+          ? "all"
+          : query.has("days")
+            ? Number(query.get("days"))
+            : 14,
       start: query.get("start") ?? undefined,
       end: query.get("end") ?? undefined,
       timezone: query.get("timezone") ?? undefined,
