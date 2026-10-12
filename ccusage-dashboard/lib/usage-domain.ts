@@ -197,9 +197,7 @@ function pricedTotals(
     .filter(
       ([name, model]) =>
         model.missingPricing ||
-        (reportUnpriced.includes(name) &&
-          model.totalTokens > 0 &&
-          totals.costUSD === 0),
+        (reportUnpriced.includes(name) && model.totalTokens > 0),
     )
     .map(([name]) => name);
   const unpricedModels = modelNames([

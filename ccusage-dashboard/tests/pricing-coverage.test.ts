@@ -214,3 +214,31 @@ test("re-exported external pricing retains its reader provenance instead of usin
   snapshot.devices[1].readerVersion = undefined;
   assert.equal(buildUsageViewExport(snapshot, "all").readerVersion, undefined);
 });
+
+test("report-level missing prices survive positive-cost mixed reports and re-imports", () => {
+  const row = {
+    period: "2026-10-05",
+    totalTokens: 30,
+    totalCost: 0.5,
+    modelBreakdowns: [
+      { modelName: "priced-model", totalTokens: 10, cost: 0.5 },
+      { modelName: "unpriced-model", totalTokens: 20, cost: 0 },
+    ],
+  };
+  const mixedReport = {
+    daily: [row],
+    session: [{ ...row, period: "session-a" }],
+    totals: { unpricedModels: ["unpriced-model"] },
+  };
+  const daily = usagePeriodsFrom(mixedReport, "daily");
+  const imported = validateUsageImport(mixedReport, "External", "codex");
+  for (const period of [
+    daily[0],
+    usageSessionsFrom(mixedReport)[0],
+    usagePeriodsFrom(imported, "daily")[0],
+  ]) {
+    assert.deepEqual(period.unpricedModels, ["unpriced-model"]);
+    assert.equal(referenceCostLabel(period), "≥ $0.50");
+  }
+  assert.equal(buildTrend(daily, "cost", false).rows[0].value, null);
+});
