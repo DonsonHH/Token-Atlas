@@ -6,7 +6,7 @@ param(
 
   [string]$DeviceName = "NVIDIA Jetson Orin Nano",
 
-  [ValidateSet("all", "claude", "codex", "opencode", "amp", "droid", "codebuff", "hermes", "pi", "goose", "openclaw", "kilo", "kimi", "qwen", "copilot", "gemini")]
+  [ValidateSet("all", "claude", "codex", "opencode", "amp", "droid", "codebuff", "hermes", "pi", "goose", "openclaw", "kilo", "kimi", "qwen", "copilot", "gemini", "antigravity", "grok", "zcode")]
   [string]$Source = "codex",
 
   [string]$InputPath
@@ -47,13 +47,28 @@ if (-not $PSBoundParameters.ContainsKey('DeviceName') -and -not [string]::IsNull
   $DeviceName = [string]$usage.deviceName
 }
 if (-not $PSBoundParameters.ContainsKey('Source') -and -not [string]::IsNullOrWhiteSpace([string]$usage.source)) {
-  $knownSources = @('all','claude','codex','opencode','amp','droid','codebuff','hermes','pi','goose','openclaw','kilo','kimi','qwen','copilot','gemini')
+  $knownSources = @('all','claude','codex','opencode','amp','droid','codebuff','hermes','pi','goose','openclaw','kilo','kimi','qwen','copilot','gemini','antigravity','grok','zcode')
   if ([string]$usage.source -notin $knownSources) { throw 'Unknown source in the report. Pass -Source explicitly.' }
   $Source = [string]$usage.source
 }
 $Source = $Source.ToLowerInvariant()
-$usage | Add-Member -NotePropertyName "deviceName" -NotePropertyValue $DeviceName -Force
-$usage | Add-Member -NotePropertyName "source" -NotePropertyValue $Source -Force
+$normalizer = Join-Path $PSScriptRoot 'normalize-usage.mjs'
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw 'Node.js is required. Install the dashboard dependencies with pnpm install first.'
+}
+# Windows PowerShell 5 otherwise sends non-ASCII clipboard text as ASCII.
+$previousOutputEncoding = $OutputEncoding
+$previousConsoleEncoding = [Console]::OutputEncoding
+try {
+  $OutputEncoding = [Text.UTF8Encoding]::new($false)
+  [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+  $normalizedJson = $rawJson | & node $normalizer $DeviceName $Source
+  if ($LASTEXITCODE -ne 0) { throw 'Usage import validation failed. No device file was changed.' }
+} finally {
+  $OutputEncoding = $previousOutputEncoding
+  [Console]::OutputEncoding = $previousConsoleEncoding
+}
+$usage = ($normalizedJson -join "`n") | ConvertFrom-Json
 
 $dashboardRoot = Split-Path -Parent $PSScriptRoot
 $deviceDirectory = Join-Path $dashboardRoot "data\devices"
@@ -66,7 +81,7 @@ $lockHandle = [IO.File]::Open($lockPath, [IO.FileMode]::CreateNew, [IO.FileAcces
 $lockHandle.Dispose()
 
 try {
-  $serializedJson = $usage | ConvertTo-Json -Depth 100
+  $serializedJson = $normalizedJson -join "`n"
   [IO.File]::WriteAllText(
     $temporaryPath,
     $serializedJson,

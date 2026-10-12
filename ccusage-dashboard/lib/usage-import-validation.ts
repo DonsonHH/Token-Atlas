@@ -88,7 +88,10 @@ export function validateUsageImport(
     // also includes unrelated week/month labels.
     canonicalRows.push({ ...row, date });
   }
-  const daily = usagePeriodsFrom({ daily: canonicalRows }, "daily");
+  const daily = usagePeriodsFrom(
+    { daily: canonicalRows, totals: record.totals },
+    "daily",
+  );
   for (const day of daily) {
     const modelTotal = Object.values(day.models).reduce(
       (sum, model) => sum + model.totalTokens,
@@ -108,6 +111,10 @@ export function validateUsageImport(
     deviceName: name.trim(),
     source,
     exportedAt,
+    ...(typeof record.readerVersion === "string" &&
+    /^\d+\.\d+\.\d+$/.test(record.readerVersion)
+      ? { readerVersion: record.readerVersion }
+      : {}),
     daily: daily.map((row) => ({ ...row, date: row.label })),
   };
 }

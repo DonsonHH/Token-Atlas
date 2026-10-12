@@ -17,14 +17,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  formatCost,
-  formatExactTokens,
-  formatShortDate,
-  formatTokens,
-} from "@/lib/format";
+import { formatExactTokens, formatShortDate, formatTokens } from "@/lib/format";
 import { calendarPeriods } from "@/lib/usage-analytics";
 import type { UsageSnapshot } from "@/lib/usage-types";
+import { pricingState, referenceCostLabel } from "@/lib/usage-pricing";
 import { TrendChart } from "./trend-chart";
 import { ModelBreakdown } from "./model-breakdown";
 
@@ -143,11 +139,17 @@ export function OverviewPage({
         />
         <Stat
           label="API 参考价"
-          value={formatCost(totals.costUSD)}
+          value={referenceCostLabel(totals)}
           color="var(--model-2)"
           icon={CircleDollarSign}
-          detail="本地估算 · 非实际账单"
-          hint="使用 ccusage 离线价格估算。新模型缺少本地价格时可能记为零。"
+          detail={
+            pricingState(totals) === "complete"
+              ? "本地估算 · 非实际账单"
+              : pricingState(totals) === "partial"
+                ? "已定价部分 · 存在价格缺失"
+                : "缺少可确认的模型价格"
+          }
+          hint="使用 ccusage 内置价格估算。缺价时显示待定价或已知小计；不会把未知价格当作免费用量。"
         />
       </section>
       <DashboardPanel

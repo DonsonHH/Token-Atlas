@@ -108,6 +108,7 @@ export function readImportedUsage(
           normalized.exportedAt ?? statSync(filePath).mtime.toISOString(),
         importedAt: statSync(filePath).mtime.toISOString(),
         exportedAt: normalized.exportedAt,
+        readerVersion: normalized.readerVersion,
       });
       raw[id] = report;
     } catch (error) {

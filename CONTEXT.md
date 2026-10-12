@@ -19,6 +19,11 @@ Product copy is Chinese and deliberately brief.
   imports without per-agent details cannot satisfy a single-agent filter.
 - Unknown model totals remain visible as unassigned; Top 5 charts include an
   other series. No fabricated per-model request counts or pricing.
+- Costs are API reference estimates, never invoices. Preserve ccusage's
+  missing-price diagnostics through imports, aggregation and exports. Active
+  legacy rows with zero cost remain unconfirmed, not "free". Incomplete cost
+  periods are gaps in charts; totals show only a clearly labelled known subtotal.
+- The pinned ccusage reader and Jetson export script must be upgraded together.
 - Sonner mounts once in the root and follows the app's saved theme.
 
 ## Modules

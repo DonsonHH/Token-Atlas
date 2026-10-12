@@ -4,6 +4,7 @@ set -Eeuo pipefail
 output_path="${1:-}"
 device_name="${2:-}"
 agent_source="${3:-codex}"
+ccusage_version="20.0.30"
 
 if [[ -z "$output_path" ]]; then
   output_path="$HOME/jetson-orin-nano.json"
@@ -22,19 +23,19 @@ if [[ "$agent_source" != "all" ]]; then
   command_args=("$agent_source" "${command_args[@]}")
 fi
 
-if command -v ccusage >/dev/null 2>&1; then
+if command -v ccusage >/dev/null 2>&1 && [[ "$(ccusage --version 2>/dev/null)" == "ccusage $ccusage_version" ]]; then
   ccusage "${command_args[@]}" > "$temporary_path"
 elif command -v pnpm >/dev/null 2>&1; then
-  pnpm dlx ccusage@20.0.19 "${command_args[@]}" > "$temporary_path"
+  pnpm dlx "ccusage@$ccusage_version" "${command_args[@]}" > "$temporary_path"
 elif command -v npx >/dev/null 2>&1; then
-  npx --yes ccusage@20.0.19 "${command_args[@]}" > "$temporary_path"
+  npx --yes "ccusage@$ccusage_version" "${command_args[@]}" > "$temporary_path"
 else
-  echo "没有找到 ccusage、pnpm 或 npx。请先安装 Node.js（包含 npx）。" >&2
+  echo "需要 ccusage $ccusage_version（用于更新价格表），或 Node.js 的 npx / pnpm。" >&2
   exit 1
 fi
 
 if command -v python3 >/dev/null 2>&1; then
-  TOKEN_ATLAS_SOURCE="$agent_source" python3 - "$temporary_path" "$output_path" "$device_name" <<'PY'
+  TOKEN_ATLAS_SOURCE="$agent_source" TOKEN_ATLAS_CCUSAGE_VERSION="$ccusage_version" python3 - "$temporary_path" "$output_path" "$device_name" <<'PY'
 import datetime
 import json
 import os
@@ -48,6 +49,7 @@ with open(input_path, "r", encoding="utf-8") as source:
 payload["deviceName"] = device_name
 payload["exportedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 payload["source"] = os.environ.get("TOKEN_ATLAS_SOURCE", "all")
+payload["readerVersion"] = os.environ.get("TOKEN_ATLAS_CCUSAGE_VERSION")
 
 with open(output_path, "w", encoding="utf-8") as destination:
     json.dump(payload, destination, ensure_ascii=False, indent=2)

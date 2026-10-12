@@ -30,13 +30,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  formatCost,
   formatDate,
   formatExactTokens,
   formatProject,
   formatTokens,
 } from "@/lib/format";
 import { downloadJsonFile } from "@/lib/download";
+import { referenceCostLabel } from "@/lib/usage-pricing";
 import type { UsageSession, UsageSnapshot } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
 
@@ -280,7 +280,7 @@ export function SessionsPage({
                         {formatTokens(session.totalTokens)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {formatCost(session.costUSD)}
+                        {referenceCostLabel(session)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -376,7 +376,7 @@ export function SessionsPage({
               <dl className="grid grid-cols-2 gap-4">
                 {[
                   ["总 token", formatExactTokens(selected.totalTokens)],
-                  ["参考价", formatCost(selected.costUSD)],
+                  ["参考价", referenceCostLabel(selected)],
                   ["输入", formatTokens(selected.inputTokens)],
                   ["输出", formatTokens(selected.outputTokens)],
                   ["缓存读取", formatTokens(selected.cacheReadTokens)],

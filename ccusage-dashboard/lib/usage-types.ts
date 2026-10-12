@@ -17,12 +17,18 @@ export const usageSourceOptions = [
   { command: "qwen", label: "Qwen", value: "qwen" },
   { command: "copilot", label: "GitHub Copilot CLI", value: "copilot" },
   { command: "gemini", label: "Gemini CLI", value: "gemini" },
+  { command: "antigravity", label: "Antigravity", value: "antigravity" },
+  { command: "grok", label: "Grok Build CLI", value: "grok" },
+  { command: "zcode", label: "ZCode", value: "zcode" },
 ] as const;
 
 export type UsageSource = (typeof usageSourceOptions)[number]["value"];
 
 export function usageSourceLabel(source: UsageSource) {
-  return usageSourceOptions.find((option) => option.value === source)?.label ?? source;
+  return (
+    usageSourceOptions.find((option) => option.value === source)?.label ??
+    source
+  );
 }
 export type UsageDeviceFilter = "all" | "local" | string;
 
@@ -36,6 +42,7 @@ export type UsageDevice = {
   updatedAt: string | null;
   importedAt?: string | null;
   exportedAt?: string | null;
+  readerVersion?: string;
   status?: "ready" | "error" | "idle";
   rangeTokens?: number;
   rangeDays?: number;
@@ -49,11 +56,16 @@ export type UsageTotals = {
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
+  unpricedModels?: string[];
+  pricingUnknown?: boolean;
 };
 
 export type UsagePeriod = UsageTotals & {
   label: string;
-  models: Record<string, UsageTotals & { isFallback?: boolean }>;
+  models: Record<
+    string,
+    UsageTotals & { isFallback?: boolean; missingPricing?: boolean }
+  >;
 };
 
 export type UsageSession = UsageTotals & {
@@ -66,6 +78,7 @@ export type UsageSession = UsageTotals & {
 
 export type UsageModel = UsageTotals & {
   isFallback: boolean;
+  missingPricing?: boolean;
   name: string;
 };
 
@@ -84,6 +97,7 @@ export type UsageSnapshot = {
   offline: true;
   raw: Record<string, unknown>;
   reader: "ccusage";
+  readerVersion?: string;
   sessions: UsageSession[];
   source: UsageSource;
   totals: UsageTotals;

@@ -8,6 +8,8 @@ export type UsageViewExport = Pick<
   UsageSnapshot,
   | "activeDeviceIds"
   | "range"
+  | "readerVersion"
+  | "warnings"
   | "daily"
   | "generatedAt"
   | "models"
@@ -21,14 +23,22 @@ export type UsageViewExport = Pick<
 
 export function buildUsageViewExport(
   snapshot: UsageSnapshot,
-  source: UsageSource
+  source: UsageSource,
 ): UsageViewExport {
   const devices = snapshot.devices.filter((device) =>
-    snapshot.activeDeviceIds.includes(device.id)
+    snapshot.activeDeviceIds.includes(device.id),
   );
 
   return {
     range: snapshot.range,
+    // An external-only re-export must not claim the local reader repriced it.
+    readerVersion:
+      devices.length === 1
+        ? devices[0].kind === "local"
+          ? snapshot.readerVersion
+          : devices[0].readerVersion
+        : undefined,
+    warnings: snapshot.warnings,
     activeDeviceIds: snapshot.activeDeviceIds,
     daily: snapshot.daily,
     devices,
@@ -44,7 +54,7 @@ export function buildUsageViewExport(
 export function usageExportFileName(
   prefix: string,
   scope: UsageDeviceFilter | UsageSource,
-  generatedAt: string
+  generatedAt: string,
 ): string {
   const safeScope =
     String(scope)

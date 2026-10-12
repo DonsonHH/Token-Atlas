@@ -10,7 +10,10 @@ import { validDateKey } from "./usage-range";
 import { usageSourceOptions } from "./usage-types";
 
 type UnknownRecord = Record<string, unknown>;
-type UsageModelTotals = UsageTotals & { isFallback?: boolean };
+type UsageModelTotals = UsageTotals & {
+  isFallback?: boolean;
+  missingPricing?: boolean;
+};
 
 export function createEmptyTotals(): UsageTotals {
   return {
@@ -49,6 +52,17 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function modelNames(value: unknown): string[] {
+  return [
+    ...new Set(
+      asArray(value).filter(
+        (name): name is string =>
+          typeof name === "string" && Boolean(name.trim()),
+      ),
+    ),
+  ].sort();
+}
+
 export function usageTotalsFrom(value: unknown): UsageTotals {
   const record = asRecord(value);
   const metadata = asRecord(record.metadata);
@@ -75,6 +89,10 @@ export function usageTotalsFrom(value: unknown): UsageTotals {
     outputTokens,
     reasoningOutputTokens,
     totalTokens,
+    ...(modelNames(record.unpricedModels).length
+      ? { unpricedModels: modelNames(record.unpricedModels) }
+      : {}),
+    ...(record.pricingUnknown === true ? { pricingUnknown: true } : {}),
   };
 }
 
@@ -91,6 +109,20 @@ export function addUsageTotals(
     reasoningOutputTokens:
       left.reasoningOutputTokens + right.reasoningOutputTokens,
     totalTokens: left.totalTokens + right.totalTokens,
+    ...(modelNames([
+      ...(left.unpricedModels ?? []),
+      ...(right.unpricedModels ?? []),
+    ]).length
+      ? {
+          unpricedModels: modelNames([
+            ...(left.unpricedModels ?? []),
+            ...(right.unpricedModels ?? []),
+          ]),
+        }
+      : {}),
+    ...(left.pricingUnknown || right.pricingUnknown
+      ? { pricingUnknown: true }
+      : {}),
   };
 }
 
@@ -121,6 +153,9 @@ function modelMap(
           {
             ...usageTotalsFrom(rawModel),
             isFallback: rawModel.isFallback === true,
+            ...(rawModel.missingPricing === true
+              ? { missingPricing: true }
+              : {}),
           },
         ];
       }),
@@ -130,34 +165,70 @@ function modelMap(
   const fallbackModels = asArray(value).length
     ? asArray(value)
     : asArray(fallback);
-  const models: Array<[string, UsageModelTotals]> = [];
+  const models = new Map<string, UsageModelTotals>();
 
   for (const model of fallbackModels) {
     const rawModel = asRecord(model);
     const name = asString(rawModel.modelName) ?? asString(rawModel.name);
     if (!name) continue;
 
-    models.push([
-      name,
-      {
-        ...usageTotalsFrom(rawModel),
-        isFallback: rawModel.isFallback === true,
-      },
-    ]);
+    // Unified reports can repeat a model once per Agent. Preserve all entries.
+    const previous = models.get(name);
+    const totals = usageTotalsFrom(rawModel);
+    models.set(name, {
+      ...(previous ? addUsageTotals(previous, totals) : totals),
+      isFallback: Boolean(previous?.isFallback || rawModel.isFallback === true),
+      ...(previous?.missingPricing || rawModel.missingPricing === true
+        ? { missingPricing: true }
+        : {}),
+    });
   }
 
   return Object.fromEntries(models);
 }
 
+function pricedTotals(
+  record: UnknownRecord,
+  models: Record<string, UsageModelTotals>,
+  reportUnpriced: string[] = [],
+): UsageTotals {
+  const totals = usageTotalsFrom(record);
+  const missingModels = Object.entries(models)
+    .filter(
+      ([name, model]) =>
+        model.missingPricing ||
+        (reportUnpriced.includes(name) &&
+          model.totalTokens > 0 &&
+          totals.costUSD === 0),
+    )
+    .map(([name]) => name);
+  const unpricedModels = modelNames([
+    ...(totals.unpricedModels ?? []),
+    ...missingModels,
+  ]);
+  // Older reports used zero for unknown prices without any diagnostics. The
+  // UI cannot verify that this is free usage, so retain an explicit unknown.
+  const unknown =
+    totals.pricingUnknown ||
+    (totals.totalTokens > 0 && totals.costUSD === 0 && !unpricedModels.length);
+  return {
+    ...totals,
+    ...(unpricedModels.length ? { unpricedModels } : {}),
+    ...(unknown ? { pricingUnknown: true } : {}),
+  };
+}
+
 export function usagePeriodsFrom(report: unknown, key: string): UsagePeriod[] {
+  const unpriced = modelNames(asRecord(asRecord(report).totals).unpricedModels);
   return asArray(asRecord(report)[key])
     .map((entry) => {
       const record = asRecord(entry);
+      const models = modelMap(record.models, record.modelBreakdowns);
 
       return {
-        ...usageTotalsFrom(record),
+        ...pricedTotals(record, models, unpriced),
         label: periodLabel(record),
-        models: modelMap(record.models, record.modelBreakdowns),
+        models,
       };
     })
     .filter((period) => key !== "daily" || validDateKey(period.label))
@@ -178,7 +249,11 @@ export function usageSessionsFrom(report: unknown): UsageSession[] {
       const metadata = asRecord(record.metadata);
 
       return {
-        ...usageTotalsFrom(record),
+        ...pricedTotals(
+          record,
+          models,
+          modelNames(asRecord(rawReport.totals).unpricedModels),
+        ),
         id:
           asString(record.sessionId) ??
           asString(record.sessionFile) ??
@@ -211,6 +286,9 @@ export function usageModelsFrom(periods: UsagePeriod[]): UsageModel[] {
       models.set(name, {
         ...(previous ? addUsageTotals(previous, usage) : usage),
         isFallback: Boolean(previous?.isFallback || usage.isFallback),
+        ...(previous?.missingPricing || usage.missingPricing
+          ? { missingPricing: true }
+          : {}),
         name,
       });
     }
@@ -232,6 +310,9 @@ function addModelMaps(
     combined[name] = {
       ...(previous ? addUsageTotals(previous, usage) : usage),
       isFallback: Boolean(previous?.isFallback || usage.isFallback),
+      ...(previous?.missingPricing || usage.missingPricing
+        ? { missingPricing: true }
+        : {}),
     };
   }
 

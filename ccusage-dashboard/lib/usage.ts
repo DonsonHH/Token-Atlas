@@ -12,6 +12,7 @@ import { readImportedUsage } from "./usage-imports";
 import { assembleUsageSnapshot } from "./usage-snapshot";
 import { usageSourceOptions, type UsageSource } from "./usage-types";
 import type { UsageRange } from "./usage-range";
+import ccusagePackage from "ccusage/package.json";
 
 export type * from "./usage-types";
 const execFileAsync = promisify(execFile);
@@ -107,5 +108,8 @@ export async function readUsageSnapshot({
         };
       })()
     : null;
-  return assembleUsageSnapshot({ range, device, source, imports, local });
+  return {
+    ...assembleUsageSnapshot({ range, device, source, imports, local }),
+    readerVersion: ccusagePackage.version,
+  };
 }

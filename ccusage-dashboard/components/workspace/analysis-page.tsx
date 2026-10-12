@@ -25,6 +25,7 @@ import {
 } from "@/lib/usage-analytics";
 import type { UsageSnapshot } from "@/lib/usage-types";
 import type { WorkspaceState } from "@/lib/workspace-state";
+import { pricingState, referenceCostLabel } from "@/lib/usage-pricing";
 import { Choice, Segmented } from "./controls";
 import { TrendChart } from "./trend-chart";
 
@@ -49,6 +50,7 @@ export function AnalysisPage({
     state.metric === "cost" ? formatCost(value) : formatTokens(value);
   const split = state.metric !== "cost" && state.split;
   const details = periods.slice().reverse();
+  const incompletePricing = pricingState(snapshot.totals) !== "complete";
   function exportPeriods() {
     try {
       downloadJsonFile(
@@ -58,6 +60,8 @@ export function AnalysisPage({
           source: snapshot.source,
           devices: snapshot.activeDeviceIds,
           grain: state.grain,
+          readerVersion: snapshot.readerVersion,
+          warnings: snapshot.warnings,
           periods,
         },
       );
@@ -109,18 +113,26 @@ export function AnalysisPage({
         </div>
         <div className="mb-5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
           <span className="text-3xl font-semibold tracking-tight tabular-nums">
-            {valueLabel(total)}
+            {state.metric === "cost"
+              ? referenceCostLabel(snapshot.totals)
+              : valueLabel(total)}
           </span>
           <span className="text-xs text-muted-foreground">
             每{grains[state.grain]}均值{" "}
             <strong className="ml-1 text-foreground tabular-nums">
-              {valueLabel(total / Math.max(periods.length, 1))}
+              {state.metric === "cost" && incompletePricing
+                ? "—"
+                : valueLabel(total / Math.max(periods.length, 1))}
             </strong>
           </span>
           <span className="text-xs text-muted-foreground">
             峰值{" "}
             <strong className="ml-1 text-foreground tabular-nums">
-              {peak ? valueLabel(metricValue(peak, state.metric)) : "—"}
+              {state.metric === "cost" && incompletePricing
+                ? "—"
+                : peak
+                  ? valueLabel(metricValue(peak, state.metric))
+                  : "—"}
             </strong>
           </span>
         </div>
@@ -131,11 +143,13 @@ export function AnalysisPage({
           average={!split && state.grain === "daily"}
         />
         <p className="mt-4 text-xs text-muted-foreground">
-          {split
-            ? "按区间用量从少到多堆叠 · 前五模型 + 其他 · 点击图例突出显示"
-            : state.grain === "daily"
-              ? "无记录日期按 0 展示"
-              : "边界周期仅统计所选日期内的用量"}
+          {state.metric === "cost" && incompletePricing
+            ? "缺价周期留空 · 汇总仅包含已定价部分"
+            : split
+              ? "按区间用量从少到多堆叠 · 前五模型 + 其他 · 点击图例突出显示"
+              : state.grain === "daily"
+                ? "无记录日期按 0 展示"
+                : "边界周期仅统计所选日期内的用量"}
         </p>
       </DashboardPanel>
       <DashboardPanel
@@ -165,7 +179,7 @@ export function AnalysisPage({
                 缓存占比
               </TableHead>
               <TableHead className="hidden text-right md:table-cell">
-                参考价
+                {state.metric === "cost" ? "总 token" : "参考价"}
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -176,7 +190,9 @@ export function AnalysisPage({
                   {period.label}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {valueLabel(metricValue(period, state.metric))}
+                  {state.metric === "cost"
+                    ? referenceCostLabel(period)
+                    : valueLabel(metricValue(period, state.metric))}
                 </TableCell>
                 <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
                   {period.totalTokens
@@ -184,7 +200,9 @@ export function AnalysisPage({
                     : "—"}
                 </TableCell>
                 <TableCell className="hidden text-right tabular-nums text-muted-foreground md:table-cell">
-                  {formatCost(period.costUSD)}
+                  {state.metric === "cost"
+                    ? formatTokens(period.totalTokens)
+                    : referenceCostLabel(period)}
                 </TableCell>
               </TableRow>
             ))}

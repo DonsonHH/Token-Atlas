@@ -1,3 +1,11 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+minimumReleaseAgeExclude:
+  - '@ccusage/ccusage-darwin-arm64@20.0.30'
+  - '@ccusage/ccusage-darwin-x64@20.0.30'
+  - '@ccusage/ccusage-linux-arm64@20.0.30'
+  - '@ccusage/ccusage-linux-x64@20.0.30'
+  - '@ccusage/ccusage-win32-arm64@20.0.30'
+  - '@ccusage/ccusage-win32-x64@20.0.30'
+  - ccusage@20.0.30

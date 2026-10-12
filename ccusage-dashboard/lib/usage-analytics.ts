@@ -7,6 +7,7 @@ import {
 import { aggregateModelColor, assignModelColors } from "./model-colors";
 import { shiftDate, type UsageRange } from "./usage-range";
 import type { UsagePeriod, UsageTotals } from "./usage-types";
+import { pricingState } from "./usage-pricing";
 
 export type Metric = "tokens" | "inputOutput" | "cacheRead" | "cost";
 export type Grain = "daily" | "weekly" | "monthly";
@@ -123,10 +124,16 @@ export function buildTrend(
     const window = periods.slice(Math.max(0, index - 6), index + 1);
     return {
       label: period.label,
-      value: metricValue(period, metric),
+      value:
+        metric === "cost" && pricingState(period) !== "complete"
+          ? null
+          : metricValue(period, metric),
       average:
-        window.reduce((sum, row) => sum + metricValue(row, metric), 0) /
-        window.length,
+        metric === "cost" &&
+        window.some((row) => pricingState(row) !== "complete")
+          ? null
+          : window.reduce((sum, row) => sum + metricValue(row, metric), 0) /
+            window.length,
       ...Object.fromEntries(
         series.map((item) => [
           item.key,

@@ -68,6 +68,9 @@ export function SourcesPage({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {device.kind === "local" ? "本机日志" : "手动导入"} ·{" "}
                     {usageSourceLabel(device.source)}
+                    {device.kind === "imported" && device.readerVersion
+                      ? ` · ccusage ${device.readerVersion}`
+                      : ""}
                   </p>
                 </div>
                 <Badge variant="outline" className="shrink-0">
@@ -171,8 +174,13 @@ export function SourcesPage({
             <p className="mt-2 font-medium">{snapshot.range.timezone}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">参考价</p>
-            <p className="mt-2 font-medium">ccusage 离线估算</p>
+            <p className="text-muted-foreground">本机读取器</p>
+            <p className="mt-2 font-medium">
+              ccusage {snapshot.readerVersion ?? "版本未知"} · 离线价格表
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              外部参考价保留导出时口径
+            </p>
           </div>
         </div>
       </DashboardPanel>

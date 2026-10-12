@@ -16,6 +16,7 @@ import type {
   UsageSource,
 } from "./usage-types";
 import { recordedUsageRange, type UsageRange } from "./usage-range";
+import { pricingWarnings } from "./usage-pricing";
 
 type SnapshotInput = {
   range: UsageRange;
@@ -102,6 +103,8 @@ export function assembleUsageSnapshot({
   );
   const weekly = weeklyUsagePeriods(daily);
   const monthly = monthlyUsagePeriods(daily);
+  const totals = daily.reduce(addUsageTotals, createEmptyTotals());
+  warnings.push(...pricingWarnings(totals));
   const sessions = local?.sessions ?? [];
   const activeDeviceIds = [
     ...(local && !local.error ? ["local"] : []),
@@ -128,7 +131,7 @@ export function assembleUsageSnapshot({
     offline: true,
     dataPath: "local",
     weeklyMethod: "daily-derived",
-    totals: daily.reduce(addUsageTotals, createEmptyTotals()),
+    totals,
     models: usageModelsFrom(daily),
     raw: { range: resolvedRange, source, activeDeviceIds, daily, sessions },
   };

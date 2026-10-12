@@ -118,7 +118,8 @@ export function UsageWorkspace() {
         toast.dismiss(id);
         return;
       }
-      if (result.warnings.length) toast.warning("部分数据未能读取", { id });
+      if (result.warnings.length)
+        toast.warning("用量已更新，存在数据提示", { id });
       else toast.success("用量已更新", { id });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "刷新失败", { id });
@@ -231,7 +232,7 @@ export function UsageWorkspace() {
               : error
                 ? "读取失败"
                 : snapshot?.warnings.length
-                  ? "部分数据"
+                  ? "数据提示"
                   : `${snapshot?.activeDeviceIds.length ?? 0} 台设备`}
           </button>
           <ThemeToggle />
