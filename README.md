@@ -90,7 +90,7 @@ pnpm dev
 bash export-jetson-usage.sh
 ```
 
-它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.0.30`；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
+它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.0.40`，支持普通 `.jsonl` 与压缩的 `.jsonl.zst` 日志；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免漏读压缩历史或继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
 
 如需指定文件、设备名称或来源：
 
@@ -128,7 +128,7 @@ bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
 
 Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目录、活跃时间和本地成本估算。它不会上传、展示或复制会话正文。
 
-“API 参考价”来自 ccusage 的离线定价表，仅用于观察趋势；它不是服务商账单、额度或 credits。当前读取器固定为 ccusage `20.0.30`。新模型仍可能缺价，此时页面保留诊断信息：完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
+“API 参考价”来自 ccusage 的离线定价表，仅用于观察趋势；它不是服务商账单、额度或 credits。当前读取器固定为 ccusage `20.0.40`。新模型仍可能缺价，此时页面保留诊断信息：完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
 
 导入的是导出时的汇总，升级本机读取器不会重新计算另一台设备的旧成本；请在原设备使用新版脚本重新导出，再更新对应数据源。只有具备可靠价格来源时，才应使用 ccusage 的 [`pricingOverrides`](https://ccusage.com/guide/config-files) 配置覆盖单模型价格。
 
@@ -161,7 +161,7 @@ flowchart LR
 | `hooks/use-usage-snapshot.ts` | 请求取消、范围身份与失败状态                           |
 | `components/workspace/`       | 页面外壳、范围控件、四个页面与导入交互                 |
 
-本机读取失败时，仍可使用有效的导入数据，并显式显示数据提示。切换筛选时不展示上一范围的结果。详细审查记录见 [重构 review](docs/redesign-review.md) 与 [价格与读取器复查](docs/pricing-review.md)。
+本机读取失败时，仍可使用有效的导入数据，并显式显示数据提示。切换筛选时不展示上一范围的结果。详细审查记录见 [重构 review](docs/redesign-review.md)、[价格与读取器复查](docs/pricing-review.md) 与 [压缩日志兼容复查](docs/compressed-history-review.md)。
 
 ## 开发与验证
 
@@ -204,6 +204,12 @@ pnpm start -- --hostname 0.0.0.0 --port 3000
 ### 导入设备没有显示
 
 确认文件位于 `ccusage-dashboard/data/devices/`，扩展名为 `.json`，根对象中包含非空 `daily` 数组。导入完成后刷新页面，并切换到“综合数据”或目标设备。
+
+### 全部日期中的历史用量突然减少
+
+先检查数据源页面的读取器版本。Codex 的历史日志可能保存为 `.jsonl.zst`；ccusage 20.0.30 不支持该格式，直到 [20.0.33](https://github.com/ccusage/ccusage/releases/tag/v20.0.33) 才加入支持。项目已升级到 20.0.40，可直接读取 `sessions/` 和 `archived_sessions/` 下的普通与压缩日志，无需手动解压或修改原日志。
+
+拉取新版项目后运行 `pnpm install`，重启正在运行的网页服务，再刷新全部日期。外部设备若曾用旧版生成报告，需要使用新版导出脚本重新导出并更新对应设备；旧汇总本身无法补出漏读的用量。
 
 ### 成本数字与账单不一致
 

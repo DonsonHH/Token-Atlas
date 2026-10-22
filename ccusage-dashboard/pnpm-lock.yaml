@@ -12,8 +12,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0(@date-fns/tz@1.5.0)(@types/react@19.2.18)(date-fns@4.4.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       ccusage:
-        specifier: 20.0.30
-        version: 20.0.30
+        specifier: 20.0.40
+        version: 20.0.40
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -245,33 +245,33 @@ packages:
       '@types/react':
         optional: true
 
-  '@ccusage/ccusage-darwin-arm64@20.0.30':
-    resolution: {integrity: sha512-94BclLNnV8kSLZIyAfa1+YtiHkG3T2wI65fkhOiE2WNgZLSncQzvk6IbUzOZ66yF/ocP/9eTCviN/UD0Y+F0QA==}
+  '@ccusage/ccusage-darwin-arm64@20.0.40':
+    resolution: {integrity: sha512-3y/T1a43RNN8ooeRvdHmLbLriotjjNQ7Lw5FXaT7OGPv7B1/zugm4wiqbcUf0y1Ix2TwGWxHfVTNThfkeYdqjw==}
     cpu: [arm64]
     os: [darwin]
 
-  '@ccusage/ccusage-darwin-x64@20.0.30':
-    resolution: {integrity: sha512-Zl3loU55ZNd3QkiRRCeYQC1E04o77IUl5VJ4oTjlwD7+KVtj6y3nkCnkdijucnspr1YGeG9NkhvQ8oFMJs5x1Q==}
+  '@ccusage/ccusage-darwin-x64@20.0.40':
+    resolution: {integrity: sha512-1Qe7hYOkLTJvFaBjrNgnA7n5xB9WNeN6g4HITTR3MGOGJ3SZWBb3IR1dphWIyv2HHibChM1Tx7Ju6cMcpyWdfA==}
     cpu: [x64]
     os: [darwin]
 
-  '@ccusage/ccusage-linux-arm64@20.0.30':
-    resolution: {integrity: sha512-/Pt/vEgjTfEukXecCSpet/9GVt7FVmBXZEvIQV6at6DYaS+R0StgTzYaHubivMLeCYlMneO/G0zes8XyP6lHvQ==}
+  '@ccusage/ccusage-linux-arm64@20.0.40':
+    resolution: {integrity: sha512-uM44JR+T+/RLANQQEJOSof/lBUifqTIZkUyuzO3gbpz/1SjWvVZDkyXT1R6JzYQ83EQzdbjQPUihCnt3iQYWhw==}
     cpu: [arm64]
     os: [linux]
 
-  '@ccusage/ccusage-linux-x64@20.0.30':
-    resolution: {integrity: sha512-25AiIicPDg3eSX0Ykv8CQUNsaGHXBwm0RSFYH5Oav9HYb9dSUxRaLbQhP8syZKA3qwtXJDcHaikvt7EWifO+1Q==}
+  '@ccusage/ccusage-linux-x64@20.0.40':
+    resolution: {integrity: sha512-h2qJioejDMP2zF6769yIoqmlrWjFsbcLI9COv4irfV4vKC48BRZeIBxmD5vC1R8PZ63iGdak4S2w3+wJjxRUNg==}
     cpu: [x64]
     os: [linux]
 
-  '@ccusage/ccusage-win32-arm64@20.0.30':
-    resolution: {integrity: sha512-SQWyvj5bQQhUnpZjZ5YrTXy67rZ6+FH6FYZbZBhrbK96qI496mC5VI6nnHBy7uBZY7WPGJpL/b1hZ08JCLnEcQ==}
+  '@ccusage/ccusage-win32-arm64@20.0.40':
+    resolution: {integrity: sha512-3SAGU5XW//jdilinish8DUJ2mCyPiLvjBFC9GWlA5Uo7hVZsBj4WUpp3wK4GmrQ/TG1pWiF146AuTsxKWoZJIA==}
     cpu: [arm64]
     os: [win32]
 
-  '@ccusage/ccusage-win32-x64@20.0.30':
-    resolution: {integrity: sha512-9mzdQmz22P1TgC8F25pC6/pqM9vqCs5cVXSUtf6+VnhxOd0IV4NP8/HUuGUR+fhCvbuirUeTlRbWXGFRxqXnTw==}
+  '@ccusage/ccusage-win32-x64@20.0.40':
+    resolution: {integrity: sha512-iMqiyYeb2lLhn7sMDTxFWw/DjRcowDoFAHN6g3SMvOe4EPqJ9rrB88eGN9sKfQ2wq6m5hOVr+9PyucbT5ZsiFg==}
     cpu: [x64]
     os: [win32]
 
@@ -1173,8 +1173,8 @@ packages:
   caniuse-lite@1.0.30001806:
     resolution: {integrity: sha512-72Cuvd95zbSYPKq6Fhg8eDJRlzgWDf7/mtoZv6Qe/DYNCEBdNxoA3+rZAU2ZhGCpZlns3EssFavaZomckT5Uuw==}
 
-  ccusage@20.0.30:
-    resolution: {integrity: sha512-JnWnY/Bcm/ij3QyShIDGgKsxAaRcsuBEn6lTvneUCe5SDuMmXkVfIs47URCuqI77H/76gHqV2qv8CZ5mXOgqpA==}
+  ccusage@20.0.40:
+    resolution: {integrity: sha512-UNo6jQI+YKW/RO/GQKHoy9KL65N+rGKQ6Auh1AeotwLQGA64MoP1CQwZ+66ifBkF+uH5NPcSzGnjMReS7nP3Tg==}
     hasBin: true
 
   chalk@4.1.2:
@@ -3345,22 +3345,22 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.18
 
-  '@ccusage/ccusage-darwin-arm64@20.0.30':
+  '@ccusage/ccusage-darwin-arm64@20.0.40':
     optional: true
 
-  '@ccusage/ccusage-darwin-x64@20.0.30':
+  '@ccusage/ccusage-darwin-x64@20.0.40':
     optional: true
 
-  '@ccusage/ccusage-linux-arm64@20.0.30':
+  '@ccusage/ccusage-linux-arm64@20.0.40':
     optional: true
 
-  '@ccusage/ccusage-linux-x64@20.0.30':
+  '@ccusage/ccusage-linux-x64@20.0.40':
     optional: true
 
-  '@ccusage/ccusage-win32-arm64@20.0.30':
+  '@ccusage/ccusage-win32-arm64@20.0.40':
     optional: true
 
-  '@ccusage/ccusage-win32-x64@20.0.30':
+  '@ccusage/ccusage-win32-x64@20.0.40':
     optional: true
 
   '@date-fns/tz@1.5.0': {}
@@ -4192,14 +4192,14 @@ snapshots:
 
   caniuse-lite@1.0.30001806: {}
 
-  ccusage@20.0.30:
+  ccusage@20.0.40:
     optionalDependencies:
-      '@ccusage/ccusage-darwin-arm64': 20.0.30
-      '@ccusage/ccusage-darwin-x64': 20.0.30
-      '@ccusage/ccusage-linux-arm64': 20.0.30
-      '@ccusage/ccusage-linux-x64': 20.0.30
-      '@ccusage/ccusage-win32-arm64': 20.0.30
-      '@ccusage/ccusage-win32-x64': 20.0.30
+      '@ccusage/ccusage-darwin-arm64': 20.0.40
+      '@ccusage/ccusage-darwin-x64': 20.0.40
+      '@ccusage/ccusage-linux-arm64': 20.0.40
+      '@ccusage/ccusage-linux-x64': 20.0.40
+      '@ccusage/ccusage-win32-arm64': 20.0.40
+      '@ccusage/ccusage-win32-x64': 20.0.40
 
   chalk@4.1.2:
     dependencies:

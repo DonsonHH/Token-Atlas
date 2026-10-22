@@ -24,6 +24,9 @@ Product copy is Chinese and deliberately brief.
   legacy rows with zero cost remain unconfirmed, not "free". Incomplete cost
   periods are gaps in charts; totals show only a clearly labelled known subtotal.
 - The pinned ccusage reader and Jetson export script must be upgraded together.
+- Codex history includes plain and Zstandard-compressed rollouts in both
+  sessions/ and archived_sessions/. Test the installed CLI with isolated
+  synthetic logs, including duplicate representations, before reader upgrades.
 - Sonner mounts once in the root and follows the app's saved theme.
 
 ## Modules

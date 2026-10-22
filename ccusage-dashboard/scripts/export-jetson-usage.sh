@@ -4,7 +4,7 @@ set -Eeuo pipefail
 output_path="${1:-}"
 device_name="${2:-}"
 agent_source="${3:-codex}"
-ccusage_version="20.0.30"
+ccusage_version="20.0.40"
 
 if [[ -z "$output_path" ]]; then
   output_path="$HOME/jetson-orin-nano.json"
@@ -30,7 +30,7 @@ elif command -v pnpm >/dev/null 2>&1; then
 elif command -v npx >/dev/null 2>&1; then
   npx --yes "ccusage@$ccusage_version" "${command_args[@]}" > "$temporary_path"
 else
-  echo "需要 ccusage $ccusage_version（用于更新价格表），或 Node.js 的 npx / pnpm。" >&2
+  echo "需要 ccusage $ccusage_version（支持压缩日志和更新的价格表），或 Node.js 的 npx / pnpm。" >&2
   exit 1
 fi
 
