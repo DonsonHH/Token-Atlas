@@ -37,6 +37,7 @@ import {
 } from "@/lib/format";
 import { downloadJsonFile } from "@/lib/download";
 import { referenceCostLabel } from "@/lib/usage-pricing";
+import { dshPricingMetadata } from "@/lib/deepseek-pricing";
 import type { UsageSession, UsageSnapshot } from "@/lib/usage-types";
 import { usageSourceLabel } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
@@ -110,6 +111,7 @@ export function SessionsPage({
       downloadJsonFile(`token-atlas-sessions-${snapshot.range.end}.json`, {
         range: snapshot.range,
         source: snapshot.source,
+        dshPricing: dshPricingMetadata(snapshot),
         model,
         search: query,
         sessions: rows,

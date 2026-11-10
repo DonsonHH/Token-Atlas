@@ -149,7 +149,7 @@ export function OverviewPage({
                 ? "已定价部分 · 存在价格缺失"
                 : "缺少可确认的模型价格"
           }
-          hint="参考价来自 ccusage 离线估算或日志明确记录的美元费用。DSH 等来源未提供价格时，显示待定价或已知小计。"
+          hint="参考价来自 ccusage、日志明确记录的美元费用或 DeepSeek 官网美元价。DSH 按北京时间峰谷价估算，不等于网关账单；未知价格仍待定价。"
         />
       </section>
       <DashboardPanel

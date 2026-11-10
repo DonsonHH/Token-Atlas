@@ -140,7 +140,11 @@ Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目
 
 只统计完成的 `assistant/message` usage。排除最后一个 `session/end-seed` 之前的继承历史，并对消息 ID 去重；日期与时区沿用全局范围。不会读取 DSH 凭据、请求账户余额、修改日志或展示会话正文。
 
-DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，推理 token 不重复累加。日志未提供明确 `costUSD` 时仅展示 token，参考价显示“待定价”。ccusage 的 `pricingOverrides` 不会作用于独立的 DSH 适配器。
+DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，推理 token 不重复累加。日志明确记录的 `costUSD` 优先；缺少费用时，已知 DeepSeek Flash / V4 Pro 模型采用 [DeepSeek 官网美元价](https://api-docs.deepseek.com/quick_start/pricing/)估算。中文页的人民币价格不会直接当作美元，也不通过汇率转换。
+
+价格快照核对于 2026-11-11，按每条用量记录的时间应用北京时间峰谷规则：工作日 9:00–12:00、14:00–18:00 为高峰，周末和已核对的中国节假日全天为空闲。节假日表覆盖 2026 / 2027 年。未知模型、无法确认的日历年份高峰时段和没有公布价格的缓存写入口径仍保留为待定价。
+
+这里使用当前官网价格回算 API 参考值，不复原历史账单，也不等于网关实际收费；不含无法从 token 用量确认的 Search / Fetch 独立请求费用。导出包含本机采用的价格来源、核对日期和计价说明，外部导入金额不自动重新定价。ccusage 的 `pricingOverrides` 不会作用于独立 DSH 适配器。详见 [DSH 官网计价与推送前审查](docs/dsh-pricing-review.md)。
 
 导入的是导出时的汇总，升级本机读取器不会重新计算另一台设备的旧成本；请在原设备使用新版脚本重新导出，再更新对应数据源。只有具备可靠价格来源时，才应使用 ccusage 的 [`pricingOverrides`](https://ccusage.com/guide/config-files) 配置覆盖单模型价格。
 

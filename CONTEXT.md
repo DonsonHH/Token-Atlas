@@ -31,8 +31,12 @@ Product copy is Chinese and deliberately brief.
 - DSH is a separate local reader, not a ccusage namespace. Combine it once in
   all-Agent views; source=dsh bypasses ccusage. Only completed usage from the
   highest supported session generation counts, after inherited seed history.
-- DSH costs remain unpriced unless the log explicitly provides costUSD. Never
-  infer a gateway's bill from its model alias or read DSH credentials.
+- DSH preserves explicitly recorded costUSD; otherwise known DeepSeek models
+  use the checked official USD rate card per event, before aggregation. Pricing
+  follows Beijing peak periods, weekends and verified Chinese holidays, never
+  the display timezone. Unknown rates stay unpriced. No implicit FX conversion.
+- Official API-equivalent estimates are not gateway bills. Keep the source,
+  check date and current-rate-card basis visible; never read DSH credentials.
 
 ## Modules
 

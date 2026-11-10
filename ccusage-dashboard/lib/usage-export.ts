@@ -3,6 +3,7 @@ import type {
   UsageSnapshot,
   UsageSource,
 } from "./usage-types";
+import { dshPricingMetadata } from "./deepseek-pricing";
 
 export type UsageViewExport = Pick<
   UsageSnapshot,
@@ -20,6 +21,7 @@ export type UsageViewExport = Pick<
 > & {
   devices: UsageSnapshot["devices"];
   source: UsageSource;
+  dshPricing?: ReturnType<typeof dshPricingMetadata>;
 };
 
 export function buildUsageViewExport(
@@ -33,6 +35,7 @@ export function buildUsageViewExport(
   return {
     range: snapshot.range,
     reader: snapshot.reader,
+    dshPricing: dshPricingMetadata(snapshot),
     // An external-only re-export must not claim the local reader repriced it.
     readerVersion:
       devices.length === 1

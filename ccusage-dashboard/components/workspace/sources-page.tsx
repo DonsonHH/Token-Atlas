@@ -19,6 +19,7 @@ import {
 } from "@/lib/usage-types";
 import { formatDate, formatTokens } from "@/lib/format";
 import { ImportSheet } from "./import-sheet";
+import { dshPricingMetadata } from "@/lib/deepseek-pricing";
 
 export function SourcesPage({
   snapshot,
@@ -185,6 +186,20 @@ export function SourcesPage({
             </p>
           </div>
         </div>
+        {dshPricingMetadata(snapshot) ? (
+          <p className="mt-4 border-t pt-4 text-xs text-muted-foreground">
+            DSH：
+            <a
+              className="underline underline-offset-4"
+              href="https://api-docs.deepseek.com/quick_start/pricing/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              DeepSeek 官网美元价
+            </a>{" "}
+            · 北京时间峰谷 · 核对于 2026-11-11 · 按当前价格回算，非实际账单
+          </p>
+        ) : null}
       </DashboardPanel>
       {importTarget ? (
         <ImportSheet

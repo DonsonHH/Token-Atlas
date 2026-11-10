@@ -10,6 +10,7 @@ import {
   mergeUsagePeriods,
 } from "./usage-domain";
 import { dateKey, type UsageRange } from "./usage-range";
+import { deepseekReferenceCostUSD } from "./deepseek-pricing";
 import type {
   LocalUsageReport,
   UsagePeriod,
@@ -34,7 +35,11 @@ const numericFields = [
   "reasoningOutputTokens",
 ] as const;
 
-function usageFrom(value: unknown, model: string): UsageTotals | null {
+function usageFrom(
+  value: unknown,
+  model: string,
+  at: Date,
+): UsageTotals | null {
   const usage = record(value);
   if (!numericFields.some((field) => usage[field] !== undefined)) return null;
   for (const key of numericFields) {
@@ -55,10 +60,18 @@ function usageFrom(value: unknown, model: string): UsageTotals | null {
   );
   if (!Number.isSafeInteger(totalTokens))
     throw new Error("用量超出安全整数范围");
-  const priced =
+  const recordedCost =
     typeof usage.costUSD === "number" &&
     Number.isFinite(usage.costUSD) &&
     usage.costUSD >= 0;
+  const officialCost = recordedCost
+    ? null
+    : deepseekReferenceCostUSD(
+        model,
+        { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens },
+        at,
+      );
+  const costUSD = recordedCost ? (usage.costUSD as number) : officialCost;
   return {
     inputTokens,
     outputTokens,
@@ -66,8 +79,8 @@ function usageFrom(value: unknown, model: string): UsageTotals | null {
     cacheCreationTokens,
     totalTokens,
     reasoningOutputTokens: Number(usage.reasoningOutputTokens ?? 0),
-    costUSD: priced ? (usage.costUSD as number) : 0,
-    ...(!priced && totalTokens > 0 ? { unpricedModels: [model] } : {}),
+    costUSD: costUSD ?? 0,
+    ...(costUSD === null && totalTokens > 0 ? { unpricedModels: [model] } : {}),
   };
 }
 
@@ -125,12 +138,12 @@ async function readSession(file: string, version: number, range: UsageRange) {
     const source = record(message.source);
     const model =
       text(source.model) ?? text(data.model) ?? activeModel ?? "DSH / 未知模型";
-    const usage = usageFrom(data.usage ?? message.usage, model);
-    if (!usage || !usage.totalTokens) return;
     const date =
       typeof event.time === "number" || typeof event.time === "string"
         ? new Date(event.time)
         : new Date(NaN);
+    const usage = usageFrom(data.usage ?? message.usage, model, date);
+    if (!usage || !usage.totalTokens) return;
     if (!Number.isFinite(date.getTime())) throw new Error("用量时间无效");
     const label = dateKey(date, range.timezone);
     if (label > range.end || (!range.allTime && label < range.start)) return;

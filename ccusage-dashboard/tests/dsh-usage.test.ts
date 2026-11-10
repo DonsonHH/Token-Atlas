@@ -12,6 +12,7 @@ import {
   assembleUsageSnapshot,
 } from "../lib/usage-snapshot";
 import { validateUsageImport } from "../lib/usage-import-validation";
+import { buildUsageViewExport } from "../lib/usage-export";
 
 const range = resolveUsageRange(
   { days: "all", timezone: "Asia/Shanghai" },
@@ -92,6 +93,86 @@ test("DSH is a distinct selectable source instead of silently falling back to al
     "dsh",
   );
 });
+
+test("DSH prices Flash token usage using official USD peak rates", async () =>
+  fixture(async (home) => {
+    const sample = event("official");
+    sample.time = Date.parse("2026-11-10T01:30:00Z");
+    sample.data.message.source.model = "deepseek-v4.1-flash";
+    sample.data.usage = {
+      inputTokens: 1_000_000,
+      cacheReadTokens: 2_000_000,
+      outputTokens: 500_000,
+      totalTokens: 3_500_000,
+      reasoningOutputTokens: 2,
+    };
+    await log(home, "official", [header("official"), sample]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].costUSD, 0.912);
+    assert.equal(report.sessions[0].costUSD, 0.912);
+    assert.equal(report.daily[0].unpricedModels, undefined);
+  }));
+
+test("DSH prices each request before daily aggregation and preserves the result through export/import", async () =>
+  fixture(async (home) => {
+    const rows = [event("off-peak"), event("peak")];
+    rows[0].time = Date.parse("2026-11-10T00:30:00Z");
+    rows[1].time = Date.parse("2026-11-10T01:30:00Z");
+    for (const row of rows) {
+      row.data.message.source.model = "deepseek-v4.1-flash";
+      row.data.usage = {
+        inputTokens: 1_000_000,
+        cacheReadTokens: 2_000_000,
+        outputTokens: 500_000,
+        totalTokens: 3_500_000,
+        reasoningOutputTokens: 2,
+      };
+    }
+    await log(home, "mixed-prices", [header("mixed-prices"), ...rows]);
+    const local = await readDshUsage(range, home);
+    const snapshot = {
+      ...assembleUsageSnapshot({
+        range,
+        source: "dsh",
+        device: "local",
+        local,
+        imports: { devices: [], dailyByDevice: {}, warnings: [] },
+      }),
+      reader: "dsh" as const,
+    };
+    assert.equal(snapshot.totals.costUSD, 1.368);
+    for (const records of [
+      snapshot.daily,
+      snapshot.weekly,
+      snapshot.monthly,
+      snapshot.models,
+      snapshot.sessions,
+    ]) {
+      assert.equal(
+        records.reduce((sum, row) => sum + row.costUSD, 0),
+        1.368,
+      );
+    }
+    const exported = buildUsageViewExport(snapshot, "dsh");
+    assert.equal(exported.dshPricing?.currency, "USD");
+    const imported = validateUsageImport(exported, "External DSH", "dsh");
+    assert.equal(imported.daily[0].costUSD, 1.368);
+    assert.equal(imported.daily[0].unpricedModels, undefined);
+  }));
+
+test("DSH preserves an explicit recorded USD cost instead of replacing it with an estimate", async () =>
+  fixture(async (home) => {
+    const sample = event("recorded");
+    sample.data.message.source.model = "deepseek-v4.1-flash";
+    const stored = {
+      ...sample,
+      data: { ...sample.data, usage: { ...sample.data.usage, costUSD: 7.5 } },
+    };
+    await log(home, "recorded", [header("recorded"), stored]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].costUSD, 7.5);
+    assert.equal(report.daily[0].unpricedModels, undefined);
+  }));
 
 test("DSH preserves unusual model names without using inherited object properties", async () =>
   fixture(async (home) => {
