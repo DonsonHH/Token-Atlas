@@ -138,9 +138,9 @@ Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目
 
 默认读取 `~/.dsh/sessions/<项目>/<会话>/`，可用 `DSH_HOME` 指定其他 DSH 根目录。支持 v3/v4 的 `.jsonl` 与 `.jsonl.zstd`，每个会话只选择最高格式代次的一份文件；未知格式和读取失败会显示提示。
 
-只统计完成的 `assistant/message` usage。排除最后一个 `session/end-seed` 之前的继承历史，并对消息 ID 去重；日期与时区沿用全局范围。不会读取 DSH 凭据、请求账户余额、修改日志或展示会话正文。
+只统计完成的 `assistant/message` usage。排除最后一个标记 `data.inherited: true` 的 `session/end-seed` 之前的继承历史；普通恢复标记不会删除已发生的用量。按消息 ID 去重，日期与时区沿用全局范围。不会读取 DSH 凭据、请求账户余额、修改日志或展示会话正文。
 
-DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，推理 token 不重复累加。日志明确记录的 `costUSD` 优先；缺少费用时，已知 DeepSeek Flash / V4 Pro 模型采用 [DeepSeek 官网美元价](https://api-docs.deepseek.com/quick_start/pricing/)估算。中文页的人民币价格不会直接当作美元，也不通过汇率转换。
+DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，`cacheWriteTokens` 归为缓存写入，`reasoningTokens` 归为推理输出但不重复累加。日志明确记录的 `costUSD` 优先；缺少费用时，已知 DeepSeek Flash / V4 Pro 模型采用 [DeepSeek 官网美元价](https://api-docs.deepseek.com/quick_start/pricing/)估算。中文页的人民币价格不会直接当作美元，也不通过汇率转换。
 
 价格快照核对于 2026-11-11，按每条用量记录的时间应用北京时间峰谷规则：工作日 9:00–12:00、14:00–18:00 为高峰，周末和已核对的中国节假日全天为空闲。节假日表覆盖 2026 / 2027 年。未知模型、无法确认的日历年份高峰时段和没有公布价格的缓存写入口径仍保留为待定价。
 

@@ -32,6 +32,7 @@ export function SourcesPage({
 }) {
   const [importTarget, setImportTarget] = useState<string | null>(null);
   const [audit, setAudit] = useState(false);
+  const pricing = dshPricingMetadata(snapshot);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -186,18 +187,19 @@ export function SourcesPage({
             </p>
           </div>
         </div>
-        {dshPricingMetadata(snapshot) ? (
+        {pricing ? (
           <p className="mt-4 border-t pt-4 text-xs text-muted-foreground">
             DSH：
             <a
               className="underline underline-offset-4"
-              href="https://api-docs.deepseek.com/quick_start/pricing/"
+              href={pricing.source}
               target="_blank"
               rel="noreferrer"
             >
               DeepSeek 官网美元价
             </a>{" "}
-            · 北京时间峰谷 · 核对于 2026-11-11 · 按当前价格回算，非实际账单
+            · 北京时间峰谷 · 核对于 {pricing.checkedAt} ·
+            按当前价格回算，非实际账单
           </p>
         ) : null}
       </DashboardPanel>

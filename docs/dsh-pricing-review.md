@@ -22,3 +22,18 @@
 `lib/deepseek-pricing.ts` 集中维护价格与计费日历；`lib/dsh-usage.ts` 仍是只读日志适配器，不读取凭据、不向 DeepSeek 或网关发送请求、不修改原始会话。
 
 回归覆盖官网价格实例、所有峰谷边界、2026/2027 节假日、周末调休、别名、未知价格、时区、单位与溢出、DSH 完整读取路径和导出来源。已先复现旧实现将应为 $0.912 的用量记为零，再验证同一测试通过。
+
+## Review 发现与修正
+
+### Standards
+
+规范审查没有发现硬性违反仓库规范的问题；发现 1 项维护性建议：数据源页面重复写死价格链接与核对日期，可能与导出元数据不同步。已改为读取同一份价格快照字段。
+
+### Spec
+
+需求审查发现 2 项兼容性问题，均已用合成日志先复现再修正：
+
+1. DSH 原生字段为 `cacheWriteTokens` / `reasoningTokens`，原实现只识别仪表盘字段名。现映射为缓存写入／推理输出，缺失 totalTokens 时也正确包含缓存写入；官方没有公布缓存写入计价时不再错误套用已知输入价。
+2. 普通恢复和继承历史都使用 `session/end-seed`，但只有 `data.inherited: true` 才是继承边界。现只在最后一个带标记的边界清除父历史，不会在普通恢复时抹去本会话已发生的用量。
+
+语义依据：[DSH TokenUsage](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/llm/llm/src/types.ts)、[Session 继承边界](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/session/src/types.ts)、[已发布 v3 格式](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/persistence-changes/historical-formats/v3.md)。

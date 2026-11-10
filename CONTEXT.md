@@ -30,7 +30,8 @@ Product copy is Chinese and deliberately brief.
 - Sonner mounts once in the root and follows the app's saved theme.
 - DSH is a separate local reader, not a ccusage namespace. Combine it once in
   all-Agent views; source=dsh bypasses ccusage. Only completed usage from the
-  highest supported session generation counts, after inherited seed history.
+  highest supported session generation counts, after the last explicitly tagged
+  inherited cut. Untagged restore boundaries must never erase owned usage.
 - DSH preserves explicitly recorded costUSD; otherwise known DeepSeek models
   use the checked official USD rate card per event, before aggregation. Pricing
   follows Beijing peak periods, weekends and verified Chinese holidays, never

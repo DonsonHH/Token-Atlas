@@ -33,7 +33,19 @@ const numericFields = [
   "cacheCreationTokens",
   "totalTokens",
   "reasoningOutputTokens",
+  "cacheWriteTokens",
+  "reasoningTokens",
 ] as const;
+
+function tokenAlias(usage: Row, native: string, compatible: string): number {
+  if (
+    usage[native] !== undefined &&
+    usage[compatible] !== undefined &&
+    usage[native] !== usage[compatible]
+  )
+    throw new Error("同一用量字段存在冲突口径");
+  return Number(usage[native] ?? usage[compatible] ?? 0);
+}
 
 function usageFrom(
   value: unknown,
@@ -53,7 +65,11 @@ function usageFrom(
   const inputTokens = Number(usage.inputTokens ?? 0);
   const outputTokens = Number(usage.outputTokens ?? 0);
   const cacheReadTokens = Number(usage.cacheReadTokens ?? 0);
-  const cacheCreationTokens = Number(usage.cacheCreationTokens ?? 0);
+  const cacheCreationTokens = tokenAlias(
+    usage,
+    "cacheWriteTokens",
+    "cacheCreationTokens",
+  );
   const totalTokens = Number(
     usage.totalTokens ??
       inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens,
@@ -78,7 +94,11 @@ function usageFrom(
     cacheReadTokens,
     cacheCreationTokens,
     totalTokens,
-    reasoningOutputTokens: Number(usage.reasoningOutputTokens ?? 0),
+    reasoningOutputTokens: tokenAlias(
+      usage,
+      "reasoningTokens",
+      "reasoningOutputTokens",
+    ),
     costUSD: costUSD ?? 0,
     ...(costUSD === null && totalTokens > 0 ? { unpricedModels: [model] } : {}),
   };
@@ -117,8 +137,9 @@ async function readSession(file: string, version: number, range: UsageRange) {
     }
     eventCount++;
     const data = record(event.data);
-    if (event.type === "session/end-seed") {
-      // Only the suffix after the LAST inherited-history marker is new usage.
+    if (event.type === "session/end-seed" && data.inherited === true) {
+      // Only TAGGED inherited cuts discard parent history. Ordinary untagged
+      // restore/replay markers never discard this session's own usage.
       boundarySeen = true;
       daily = new Map();
       totals = createEmptyTotals();

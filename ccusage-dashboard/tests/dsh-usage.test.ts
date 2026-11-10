@@ -48,7 +48,12 @@ const event = (id: string, tokens = 125, extra = {}) => ({
   },
   ...extra,
 });
-const marker = { type: "session/end-seed", seq: 2, time, data: {} };
+const marker = {
+  type: "session/end-seed",
+  seq: 2,
+  time,
+  data: { inherited: true },
+};
 const compressedHeader = Buffer.from(
   "KLUv/SBk1QIA8oUUGoBrsQHgxHCtlIHpdKLXIUq36KjjHDONKVgPgEhVVSkKYZAYCgLzHu67PBnTNbE05vv9CEWTn4x1YBO4qz4fhcPYfGhKLN8weeGg6tXmP481JAEAKpQm",
   "base64",
@@ -93,6 +98,59 @@ test("DSH is a distinct selectable source instead of silently falling back to al
     "dsh",
   );
 });
+
+test("DSH normalizes native cacheWriteTokens and reasoningTokens without inventing a write price", async () =>
+  fixture(async (home) => {
+    const sample = event("native-fields");
+    sample.data.message.source.model = "deepseek-flash";
+    const native = {
+      ...sample,
+      data: {
+        ...sample.data,
+        usage: {
+          inputTokens: 1_000_000,
+          outputTokens: 500_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 2_000_000,
+          reasoningTokens: 123,
+        },
+      },
+    };
+    await log(home, "native-fields", [header("native-fields"), native]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].cacheCreationTokens, 2_000_000);
+    assert.equal(report.daily[0].reasoningOutputTokens, 123);
+    assert.equal(report.daily[0].totalTokens, 3_500_000);
+    assert.deepEqual(report.daily[0].unpricedModels, ["deepseek-flash"]);
+  }));
+
+test("DSH ordinary restore boundaries never discard previously owned usage", async () =>
+  fixture(async (home) => {
+    const ordinary = { type: "session/end-seed", seq: 9, time, data: {} };
+    await log(home, "restored", [
+      header("restored"),
+      event("before", 100),
+      ordinary,
+      event("after", 50),
+    ]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].totalTokens, 150);
+  }));
+
+test("DSH fork cuts exclude inherited events but later untagged restores retain owned events", async () =>
+  fixture(async (home) => {
+    const ordinary = { type: "session/end-seed", seq: 9, time, data: {} };
+    await log(home, "fork-restore", [
+      header("fork-restore", { isSeeded: true }),
+      event("parent", 125),
+      marker,
+      event("own-before", 100),
+      ordinary,
+      event("own-after", 50),
+    ]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].totalTokens, 150);
+  }));
 
 test("DSH prices Flash token usage using official USD peak rates", async () =>
   fixture(async (home) => {
