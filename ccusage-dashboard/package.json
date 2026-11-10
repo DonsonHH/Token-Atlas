@@ -13,10 +13,11 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "ccusage": "20.0.40",
+    "ccusage": "20.0.48",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "fzstd": "0.1.1",
     "lucide-react": "^1.28.0",
     "next": "16.2.12",
     "react": "19.2.4",

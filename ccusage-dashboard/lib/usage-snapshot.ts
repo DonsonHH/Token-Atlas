@@ -11,9 +11,9 @@ import {
 import type {
   UsageDevice,
   UsagePeriod,
-  UsageSession,
   UsageSnapshot,
   UsageSource,
+  LocalUsageReport,
 } from "./usage-types";
 import { recordedUsageRange, type UsageRange } from "./usage-range";
 import { pricingWarnings } from "./usage-pricing";
@@ -22,12 +22,7 @@ type SnapshotInput = {
   range: UsageRange;
   source: UsageSource;
   device: string;
-  local: {
-    daily: UsagePeriod[];
-    sessions: UsageSession[];
-    error?: string;
-    sessionError?: string;
-  } | null;
+  local: LocalUsageReport | null;
   imports: {
     devices: UsageDevice[];
     dailyByDevice: Record<string, UsagePeriod[]>;
@@ -55,6 +50,7 @@ export function assembleUsageSnapshot({
   );
   if (local?.error) warnings.push(local.error);
   if (local?.sessionError) warnings.push(local.sessionError);
+  warnings.push(...(local?.warnings ?? []));
   const devices: UsageDevice[] = [
     {
       id: "local",
@@ -134,5 +130,32 @@ export function assembleUsageSnapshot({
     totals,
     models: usageModelsFrom(daily),
     raw: { range: resolvedRange, source, activeDeviceIds, daily, sessions },
+  };
+}
+
+/** Keep a working local reader visible when another reader fails. */
+export function combineLocalUsageReports(
+  reports: LocalUsageReport[],
+): LocalUsageReport {
+  const warnings = reports.flatMap((report) => [
+    ...(report.warnings ?? []),
+    ...(report.error ? [report.error] : []),
+    ...(report.sessionError ? [report.sessionError] : []),
+  ]);
+  return {
+    daily: mergeUsagePeriods(...reports.map((report) => report.daily)),
+    sessions: reports
+      .flatMap((report) => report.sessions)
+      .sort((a, b) =>
+        (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""),
+      ),
+    warnings: [...new Set(warnings)],
+    ...(reports.length && reports.every((report) => report.error)
+      ? { error: "本机所有用量读取器均未成功，请检查数据提示。" }
+      : {}),
+    ...(reports.length &&
+    reports.every((report) => report.error || report.sessionError)
+      ? { sessionError: "本机会话未能完整读取。" }
+      : {}),
   };
 }

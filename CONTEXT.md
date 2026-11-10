@@ -28,6 +28,11 @@ Product copy is Chinese and deliberately brief.
   sessions/ and archived_sessions/. Test the installed CLI with isolated
   synthetic logs, including duplicate representations, before reader upgrades.
 - Sonner mounts once in the root and follows the app's saved theme.
+- DSH is a separate local reader, not a ccusage namespace. Combine it once in
+  all-Agent views; source=dsh bypasses ccusage. Only completed usage from the
+  highest supported session generation counts, after inherited seed history.
+- DSH costs remain unpriced unless the log explicitly provides costUSD. Never
+  infer a gateway's bill from its model alias or read DSH credentials.
 
 ## Modules
 

@@ -4,7 +4,12 @@ set -Eeuo pipefail
 output_path="${1:-}"
 device_name="${2:-}"
 agent_source="${3:-codex}"
-ccusage_version="20.0.40"
+ccusage_version="20.0.48"
+
+if [[ "$agent_source" == "dsh" ]]; then
+  echo "DSH 由 Token Atlas 本地适配器读取。请在网页筛选本机 / DSH 后导出汇总；ccusage CLI 尚不支持 dsh。" >&2
+  exit 1
+fi
 
 if [[ -z "$output_path" ]]; then
   output_path="$HOME/jetson-orin-nano.json"

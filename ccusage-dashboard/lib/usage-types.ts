@@ -20,6 +20,7 @@ export const usageSourceOptions = [
   { command: "antigravity", label: "Antigravity", value: "antigravity" },
   { command: "grok", label: "Grok Build CLI", value: "grok" },
   { command: "zcode", label: "ZCode", value: "zcode" },
+  { command: null, label: "DSH · DeepSeek Harness", value: "dsh" },
 ] as const;
 
 export type UsageSource = (typeof usageSourceOptions)[number]["value"];
@@ -82,6 +83,14 @@ export type UsageModel = UsageTotals & {
   name: string;
 };
 
+export type LocalUsageReport = {
+  daily: UsagePeriod[];
+  sessions: UsageSession[];
+  warnings?: string[];
+  error?: string;
+  sessionError?: string;
+};
+
 export type UsageSnapshot = {
   range: UsageRange;
   warnings: string[];
@@ -96,7 +105,7 @@ export type UsageSnapshot = {
   monthly: UsagePeriod[];
   offline: true;
   raw: Record<string, unknown>;
-  reader: "ccusage";
+  reader: "ccusage" | "ccusage+dsh" | "dsh";
   readerVersion?: string;
   sessions: UsageSession[];
   source: UsageSource;

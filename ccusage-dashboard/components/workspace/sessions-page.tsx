@@ -38,6 +38,7 @@ import {
 import { downloadJsonFile } from "@/lib/download";
 import { referenceCostLabel } from "@/lib/usage-pricing";
 import type { UsageSession, UsageSnapshot } from "@/lib/usage-types";
+import { usageSourceLabel } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
 
 function time(value: string | null) {
@@ -71,7 +72,12 @@ export function SessionsPage({
       snapshot.sessions
         .filter((item) => {
           const matchesModel = model === "all" || item.models.includes(model);
-          const matchesQuery = [item.id, item.project ?? "", ...item.models]
+          const matchesQuery = [
+            item.id,
+            item.project ?? "",
+            ...(item.source ? [usageSourceLabel(item.source)] : []),
+            ...item.models,
+          ]
             .join(" ")
             .toLowerCase()
             .includes(query.trim().toLowerCase());
@@ -264,6 +270,11 @@ export function SessionsPage({
                         >
                           {sessionLabel(session)}
                         </button>
+                        {session.source ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {usageSourceLabel(session.source)}
+                          </p>
+                        ) : null}
                       </TableCell>
                       <TableCell className="max-w-48">
                         <span
@@ -306,6 +317,9 @@ export function SessionsPage({
                     {session.models.join(", ") || "未归类模型"}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
+                    {session.source
+                      ? `${usageSourceLabel(session.source)} · `
+                      : ""}
                     {formatDate(session.lastActivity)}
                   </p>
                 </button>
@@ -375,6 +389,9 @@ export function SessionsPage({
               </div>
               <dl className="grid grid-cols-2 gap-4">
                 {[
+                  ...(selected.source
+                    ? [["Agent", usageSourceLabel(selected.source)]]
+                    : []),
                   ["总 token", formatExactTokens(selected.totalTokens)],
                   ["参考价", referenceCostLabel(selected)],
                   ["输入", formatTokens(selected.inputTokens)],

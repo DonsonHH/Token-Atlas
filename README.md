@@ -19,7 +19,7 @@
 
 ## 它解决什么问题
 
-Token Atlas 只在你的机器上读取 ccusage 的离线汇总。它适合同时使用多种 Agent、在 Windows 与 Ubuntu / Jetson 之间切换，或希望长期观察 token 规模、缓存复用和模型结构的个人开发者。
+Token Atlas 通过 ccusage 和 DSH 只读适配器，在你的机器上汇总 Agent 日志。它适合同时使用多种 Agent、在 Windows 与 Ubuntu / Jetson 之间切换，或希望长期观察 token 规模、缓存复用和模型结构的个人开发者。
 
 它不上传会话正文，也不需要 API Key。浏览器仅请求本地服务；外部设备只通过你主动复制或导入的 JSON 汇总参与统计。
 
@@ -33,6 +33,8 @@ Token Atlas 只在你的机器上读取 ccusage 的离线汇总。它适合同�
 ## 支持的 Agent 与数据范围
 
 Token Atlas 使用 ccusage 的离线报告。界面可按已识别来源筛选 Claude Code、OpenAI Codex、OpenCode、Amp、Droid、Codebuff、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI、Gemini CLI、Antigravity、Grok 与 ZCode。
+
+DeepSeek Harness（`dsh`）通过 Token Atlas 的独立适配器读取。它不是 ccusage 的原生来源；仅升级 ccusage 并不能补齐 DSH 用量。选择 **DSH · DeepSeek Harness** 可单独查看，也会计入“全部 Agent”的本机汇总。
 
 可用来源取决于本机实际日志。导入表单和命令行脚本优先使用报告中已有的来源；没有来源元数据的旧报告默认按 Codex 处理，导入其他 Agent 时请显式选择真实来源。
 
@@ -90,7 +92,7 @@ pnpm dev
 bash export-jetson-usage.sh
 ```
 
-它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.0.40`，支持普通 `.jsonl` 与压缩的 `.jsonl.zst` 日志；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免漏读压缩历史或继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
+它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.0.48`，支持普通 `.jsonl` 与压缩的 `.jsonl.zst` 日志；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免漏读压缩历史或继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
 
 如需指定文件、设备名称或来源：
 
@@ -99,6 +101,8 @@ bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
 ```
 
 将最后一个参数改为 `all`，可导出 ccusage 识别到的全部来源。
+
+该脚本的 `all` 不包含 DSH。DSH 需要在日志所在设备运行 Token Atlas，按“本机 / DSH”筛选后使用网页“导出汇总”，再导入另一台设备。
 
 ### 2. 在网页导入（推荐）
 
@@ -128,7 +132,15 @@ bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
 
 Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目录、活跃时间和本地成本估算。它不会上传、展示或复制会话正文。
 
-“API 参考价”来自 ccusage 的离线定价表，仅用于观察趋势；它不是服务商账单、额度或 credits。当前读取器固定为 ccusage `20.0.40`。新模型仍可能缺价，此时页面保留诊断信息：完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
+“API 参考价”来自 ccusage 的离线定价表或日志明确记录的美元费用，仅用于观察趋势；它不是服务商账单、额度或 credits。当前 ccusage 版本固定为 `20.0.48`。新模型仍可能缺价，此时页面保留诊断信息：完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
+
+### DSH 本地日志
+
+默认读取 `~/.dsh/sessions/<项目>/<会话>/`，可用 `DSH_HOME` 指定其他 DSH 根目录。支持 v3/v4 的 `.jsonl` 与 `.jsonl.zstd`，每个会话只选择最高格式代次的一份文件；未知格式和读取失败会显示提示。
+
+只统计完成的 `assistant/message` usage。排除最后一个 `session/end-seed` 之前的继承历史，并对消息 ID 去重；日期与时区沿用全局范围。不会读取 DSH 凭据、请求账户余额、修改日志或展示会话正文。
+
+DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，推理 token 不重复累加。日志未提供明确 `costUSD` 时仅展示 token，参考价显示“待定价”。ccusage 的 `pricingOverrides` 不会作用于独立的 DSH 适配器。
 
 导入的是导出时的汇总，升级本机读取器不会重新计算另一台设备的旧成本；请在原设备使用新版脚本重新导出，再更新对应数据源。只有具备可靠价格来源时，才应使用 ccusage 的 [`pricingOverrides`](https://ccusage.com/guide/config-files) 配置覆盖单模型价格。
 
@@ -143,6 +155,7 @@ flowchart LR
   Browser["浏览器仪表盘"] --> Route["/api/usage"]
   Route --> Reader["readUsageSnapshot"]
   Reader --> Cli["ccusage 离线报告"]
+  Reader --> Dsh["DSH 只读用量适配器"]
   Reader --> Imports["data/devices/*.json"]
   Cli --> Local["本机 Agent 日志"]
   Imports --> Reader
@@ -155,6 +168,7 @@ flowchart LR
 | ----------------------------- | ------------------------------------------------------ |
 | `lib/usage-range.ts`          | 日期、时区与范围校验                                   |
 | `lib/usage.ts`                | ccusage 读取编排                                       |
+| `lib/dsh-usage.ts`            | DSH 代次选择、流式解压、继承历史排除与用量投影         |
 | `lib/usage-snapshot.ts`       | 合并本机 / 导入，统一日、周、月与模型汇总              |
 | `lib/usage-analytics.ts`      | 补齐日期、按指标求均值、无遗漏模型堆叠                 |
 | `lib/usage-pricing.ts`        | 区分完整价格、已知小计与未确认价格，统一页面诊断与文案 |
@@ -207,7 +221,7 @@ pnpm start -- --hostname 0.0.0.0 --port 3000
 
 ### 全部日期中的历史用量突然减少
 
-先检查数据源页面的读取器版本。Codex 的历史日志可能保存为 `.jsonl.zst`；ccusage 20.0.30 不支持该格式，直到 [20.0.33](https://github.com/ccusage/ccusage/releases/tag/v20.0.33) 才加入支持。项目已升级到 20.0.40，可直接读取 `sessions/` 和 `archived_sessions/` 下的普通与压缩日志，无需手动解压或修改原日志。
+先检查数据源页面的读取器版本。Codex 的历史日志可能保存为 `.jsonl.zst`；ccusage 20.0.30 不支持该格式，直到 [20.0.33](https://github.com/ccusage/ccusage/releases/tag/v20.0.33) 才加入支持。项目现使用 20.0.48，可直接读取 `sessions/` 和 `archived_sessions/` 下的普通与压缩日志，无需手动解压或修改原日志。
 
 拉取新版项目后运行 `pnpm install`，重启正在运行的网页服务，再刷新全部日期。外部设备若曾用旧版生成报告，需要使用新版导出脚本重新导出并更新对应设备；旧汇总本身无法补出漏读的用量。
 

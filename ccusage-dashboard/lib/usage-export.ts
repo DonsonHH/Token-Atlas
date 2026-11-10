@@ -9,6 +9,7 @@ export type UsageViewExport = Pick<
   | "activeDeviceIds"
   | "range"
   | "readerVersion"
+  | "reader"
   | "warnings"
   | "daily"
   | "generatedAt"
@@ -31,6 +32,7 @@ export function buildUsageViewExport(
 
   return {
     range: snapshot.range,
+    reader: snapshot.reader,
     // An external-only re-export must not claim the local reader repriced it.
     readerVersion:
       devices.length === 1

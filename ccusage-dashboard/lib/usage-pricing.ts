@@ -22,7 +22,7 @@ export function pricingWarnings(totals: UsageTotals): string[] {
   const warnings: string[] = [];
   if (totals.unpricedModels?.length) {
     warnings.push(
-      `缺少模型价格：${totals.unpricedModels.join("、")}。参考价只包含已定价用量；请更新 ccusage 或使用有明确来源的 pricingOverrides。`,
+      `缺少模型价格：${totals.unpricedModels.join("、")}。参考价只包含已定价用量，请核对读取器与有明确来源的模型价格；DSH 日志未提供美元费用时保留为待定价。`,
     );
   }
   if (totals.pricingUnknown) {

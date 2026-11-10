@@ -176,7 +176,9 @@ export function SourcesPage({
           <div>
             <p className="text-muted-foreground">本机读取器</p>
             <p className="mt-2 font-medium">
-              ccusage {snapshot.readerVersion ?? "版本未知"} · 离线价格表
+              {snapshot.reader === "dsh"
+                ? "DSH 本地日志 · v3/v4"
+                : `ccusage ${snapshot.readerVersion ?? "版本未知"}${snapshot.reader === "ccusage+dsh" ? " + DSH 日志" : " · 离线价格表"}`}
             </p>
             <p className="mt-1 text-muted-foreground">
               外部参考价保留导出时口径

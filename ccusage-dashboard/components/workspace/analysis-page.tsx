@@ -61,6 +61,7 @@ export function AnalysisPage({
           devices: snapshot.activeDeviceIds,
           grain: state.grain,
           readerVersion: snapshot.readerVersion,
+          reader: snapshot.reader,
           warnings: snapshot.warnings,
           periods,
         },

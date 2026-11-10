@@ -149,7 +149,7 @@ export function OverviewPage({
                 ? "已定价部分 · 存在价格缺失"
                 : "缺少可确认的模型价格"
           }
-          hint="使用 ccusage 内置价格估算。缺价时显示待定价或已知小计；不会把未知价格当作免费用量。"
+          hint="参考价来自 ccusage 离线估算或日志明确记录的美元费用。DSH 等来源未提供价格时，显示待定价或已知小计。"
         />
       </section>
       <DashboardPanel
