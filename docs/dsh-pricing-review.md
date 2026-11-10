@@ -37,3 +37,10 @@
 2. 普通恢复和继承历史都使用 `session/end-seed`，但只有 `data.inherited: true` 才是继承边界。现只在最后一个带标记的边界清除父历史，不会在普通恢复时抹去本会话已发生的用量。
 
 语义依据：[DSH TokenUsage](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/llm/llm/src/types.ts)、[Session 继承边界](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/session/src/types.ts)、[已发布 v3 格式](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/persistence-changes/historical-formats/v3.md)。
+
+## 最终验证
+
+- 两路独立复核在 6cb8ea4 确认全部发现已解决：Standards pass；Spec pass。规范轴共 1 项 P3 建议；需求轴共 2 项，最高 P1（恢复边界误删用量），均已修正，无剩余阻塞项。
+- `pnpm verify` 全部通过：lint、严格类型检查、57 项测试和生产构建。部署追踪没有纳入 DSH 原始文件或私人设备报告。
+- 固定 2026-11-10 的实际 DSH 用量为 19,722,146 token。独立按官网空闲美元价计算为 $1.896890766，与接口日、周、月、会话汇总一致；页面显示 $1.90，数据提示为空。
+- 浏览器核对了数据源的官方价格链接与核对日期，下载保留 USD、价格来源、核对日期及计价说明；控制台无错误。截图与报告只保留在本机临时验证目录，不提交到仓库。
