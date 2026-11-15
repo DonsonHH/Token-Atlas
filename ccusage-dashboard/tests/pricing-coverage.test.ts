@@ -15,6 +15,20 @@ import { resolveUsageRange } from "../lib/usage-range";
 import { validateUsageImport } from "../lib/usage-import-validation";
 import { pricingState, referenceCostLabel } from "../lib/usage-pricing";
 import { buildUsageViewExport } from "../lib/usage-export";
+import { searchableModelNames } from "../lib/model-names";
+
+test("normalized session model names remain searchable by either Flash alias", () => {
+  const [session] = usageSessionsFrom({
+    sessions: [{ modelsUsed: ["deepseek-flash", "deepseek-v4.1-flash"] }],
+  });
+  const searchNames = session.models.flatMap(searchableModelNames);
+  assert.deepEqual(session.models, ["deepseek-flash"]);
+  assert.ok(searchNames.includes("deepseek-flash"));
+  assert.ok(searchNames.includes("deepseek-v4.1-flash"));
+  assert.deepEqual(searchableModelNames("deepseek-v4-flash"), [
+    "deepseek-v4-flash",
+  ]);
+});
 
 test("ccusage and imported Flash aliases share one model without losing costs or missing-price diagnostics", () => {
   const [native] = usagePeriodsFrom(
@@ -120,6 +134,140 @@ const report = {
     unpricedModels: ["new-unpriced-model"],
   },
 };
+
+test("Flash pricing warnings stay on the affected day and session after alias grouping", () => {
+  for (const explicitFlag of [true, false]) {
+    const priced = {
+      date: "2026-11-10",
+      sessionId: "priced",
+      totalTokens: 100,
+      costUSD: 0.25,
+      models: { "deepseek-flash": { totalTokens: 100, costUSD: 0.25 } },
+    };
+    const unpriced = {
+      date: "2026-11-11",
+      sessionId: "unpriced",
+      totalTokens: 50,
+      costUSD: 0,
+      modelBreakdowns: [
+        {
+          modelName: "deepseek-v4.1-flash",
+          totalTokens: 50,
+          ...(explicitFlag ? { missingPricing: true } : {}),
+        },
+      ],
+    };
+    const native = {
+      daily: [priced, unpriced],
+      sessions: [priced, unpriced],
+      totals: { unpricedModels: ["deepseek-v4.1-flash"] },
+    };
+    const days = usagePeriodsFrom(native, "daily");
+    assert.deepEqual(days.map(pricingState), ["complete", "unavailable"]);
+    assert.deepEqual(
+      buildTrend(days, "cost", false).rows.map((row) => row.value),
+      [0.25, null],
+    );
+    assert.deepEqual(days[1].unpricedModels, ["deepseek-flash"]);
+    const sessions = usageSessionsFrom(native);
+    assert.equal(
+      sessions.find(({ id }) => id === "priced")?.unpricedModels,
+      undefined,
+    );
+    assert.deepEqual(
+      sessions.find(({ id }) => id === "unpriced")?.unpricedModels,
+      ["deepseek-flash"],
+    );
+  }
+});
+
+test("scoped price warnings do not spread when a normalized export is re-imported", () => {
+  const daily = usagePeriodsFrom(
+    {
+      daily: [
+        {
+          date: "2026-11-10",
+          totalTokens: 100,
+          costUSD: 0.25,
+          models: { "deepseek-flash": { totalTokens: 100, costUSD: 0.25 } },
+        },
+        {
+          date: "2026-11-11",
+          totalTokens: 50,
+          costUSD: 0,
+          models: {
+            "deepseek-flash": { totalTokens: 50, missingPricing: true },
+          },
+        },
+      ],
+    },
+    "daily",
+  );
+  const range = resolveUsageRange(
+    { start: "2026-11-10", end: "2026-11-11" },
+    new Date("2026-11-12T12:00:00Z"),
+  );
+  const snapshot = assembleUsageSnapshot({
+    range,
+    source: "dsh",
+    device: "local",
+    local: { daily, sessions: [] },
+    imports: { devices: [], dailyByDevice: {}, warnings: [] },
+  });
+  const exported = buildUsageViewExport(snapshot, "dsh");
+  const imported = validateUsageImport(exported, "External", "dsh");
+  assert.deepEqual(imported.daily.map(pricingState), [
+    "complete",
+    "unavailable",
+  ]);
+  assert.equal(imported.daily[0].costUSD, 0.25);
+});
+
+test("a scoped warning elsewhere does not erase a legacy hint for a model with no confirmed price", () => {
+  const flash = "deepseek-v4.1-flash";
+  const daily = usagePeriodsFrom(
+    {
+      daily: [
+        {
+          date: "2026-11-10",
+          totalTokens: 50,
+          costUSD: 0,
+          models: { [flash]: { totalTokens: 50, missingPricing: true } },
+        },
+        {
+          date: "2026-11-11",
+          totalTokens: 100,
+          costUSD: 0.5,
+          models: {
+            [flash]: { totalTokens: 50, costUSD: 0 },
+            other: { totalTokens: 50, costUSD: 0.5 },
+          },
+        },
+        {
+          date: "2026-11-12",
+          totalTokens: 100,
+          costUSD: 0.5,
+          models: {
+            [flash]: { totalTokens: 50, costUSD: 0, missingPricing: false },
+            other: { totalTokens: 50, costUSD: 0.5 },
+          },
+        },
+      ],
+      totals: { unpricedModels: [flash] },
+    },
+    "daily",
+  );
+  assert.deepEqual(daily.map(pricingState), [
+    "unavailable",
+    "partial",
+    "complete",
+  ]);
+  assert.deepEqual(daily[1].unpricedModels, ["deepseek-flash"]);
+  assert.deepEqual(
+    buildTrend(daily, "cost", false).rows.map(({ value }) => value),
+    [null, null, 0.5],
+  );
+});
 
 test("upstream missing-price metadata survives normalization and daily/weekly/monthly aggregation", () => {
   const daily = usagePeriodsFrom(report, "daily");

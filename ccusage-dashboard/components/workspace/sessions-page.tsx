@@ -37,8 +37,8 @@ import {
 } from "@/lib/format";
 import { downloadJsonFile } from "@/lib/download";
 import { referenceCostLabel } from "@/lib/usage-pricing";
-import { dshPricingMetadata } from "@/lib/deepseek-pricing";
-import { dshAstraPricingMetadata } from "@/lib/astra-pricing";
+import { searchableModelNames } from "@/lib/model-names";
+import { usagePricingMetadata } from "@/lib/usage-export";
 import type { UsageSession, UsageSnapshot } from "@/lib/usage-types";
 import { usageSourceLabel } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
@@ -78,7 +78,7 @@ export function SessionsPage({
             item.id,
             item.project ?? "",
             ...(item.source ? [usageSourceLabel(item.source)] : []),
-            ...item.models,
+            ...item.models.flatMap(searchableModelNames),
           ]
             .join(" ")
             .toLowerCase()
@@ -112,8 +112,8 @@ export function SessionsPage({
       downloadJsonFile(`token-atlas-sessions-${snapshot.range.end}.json`, {
         range: snapshot.range,
         source: snapshot.source,
-        dshPricing: dshPricingMetadata(snapshot),
-        dshAstraPricing: dshAstraPricingMetadata({
+        ...usagePricingMetadata({
+          reader: snapshot.reader,
           activeDeviceIds: snapshot.activeDeviceIds,
           sessions: rows,
         }),

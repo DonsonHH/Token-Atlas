@@ -144,9 +144,9 @@ DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展�
 
 DeepSeek 价格快照核对于 2026-11-11，按每条用量记录的时间应用北京时间峰谷规则：工作日 9:00–12:00、14:00–18:00 为高峰，周末和已核对的中国节假日全天为空闲。节假日表覆盖 2026 / 2027 年。未知模型或无法确认的计价口径仍保留为待定价。
 
-DSH 的 `gpt-6-astra` 缺少记录费用时，按 [OpenAI 官方 Standard 档](https://developers.openai.com/api/docs/models/gpt-6-astra)和[默认 30 分钟缓存写入价](https://developers.openai.com/api/docs/guides/prompt-caching)逐请求估算，超过 272,000 输入 token（含缓存读写）的请求采用长上下文费率。不会重算 ccusage 的 Codex 费用，也不代表 DSH 网关的实际档位或账单。
+DSH 的 `gpt-6-astra` 缺少记录费用、且输入和输出计数完整并一致时，按 [OpenAI 官方 Standard 档](https://developers.openai.com/api/docs/models/gpt-6-astra)和[默认 30 分钟缓存写入价](https://developers.openai.com/api/docs/guides/prompt-caching)逐请求估算，超过 272,000 输入 token（含缓存读写）的请求采用长上下文费率。只有实际采用这套费率时，页面和导出才标注 Astra 价表。不会重算 ccusage 的 Codex 费用，也不代表 DSH 网关的实际档位或账单。
 
-模型分布、趋势拆分和会话筛选会把 `deepseek-v4.1-flash` 归到官网 API 名 `deepseek-flash`。原始日志和已导入报告的费用不变，旧版 `deepseek-v4-flash` 及 Pro 仍单独统计。
+模型分布、趋势拆分和会话筛选会把 `deepseek-v4.1-flash` 归到官网 API 名 `deepseek-flash`，会话搜索仍兼容两个名字。原始日志和已导入报告的费用不变，缺价提示仍限定在受影响的记录，旧版 `deepseek-v4-flash` 及 Pro 仍单独统计。
 
 这里使用当前官网价格回算 API 参考值，不复原历史账单，也不等于网关实际收费；不含无法从 token 用量确认的 Search / Fetch 独立请求费用。导出包含本机采用的价格来源、核对日期和计价说明，外部导入金额不自动重新定价。ccusage 的 `pricingOverrides` 不会作用于独立 DSH 适配器。详见 [DSH 官网计价与推送前审查](docs/dsh-pricing-review.md)。
 

@@ -76,6 +76,8 @@ export type UsageSession = UsageTotals & {
   models: string[];
   project: string | null;
   source?: UsageSource;
+  /** At least one counted request was estimated using the DSH Astra rate card. */
+  hasAstraEstimate?: true;
 };
 
 export type UsageModel = UsageTotals & {

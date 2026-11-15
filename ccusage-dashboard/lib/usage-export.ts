@@ -22,9 +22,16 @@ export type UsageViewExport = Pick<
 > & {
   devices: UsageSnapshot["devices"];
   source: UsageSource;
-  dshPricing?: ReturnType<typeof dshPricingMetadata>;
-  dshAstraPricing?: ReturnType<typeof dshAstraPricingMetadata>;
-};
+} & Partial<ReturnType<typeof usagePricingMetadata>>;
+
+export function usagePricingMetadata(
+  scope: Pick<UsageSnapshot, "reader" | "activeDeviceIds" | "sessions">,
+) {
+  return {
+    dshPricing: dshPricingMetadata(scope),
+    dshAstraPricing: dshAstraPricingMetadata(scope),
+  };
+}
 
 export function buildUsageViewExport(
   snapshot: UsageSnapshot,
@@ -37,8 +44,7 @@ export function buildUsageViewExport(
   return {
     range: snapshot.range,
     reader: snapshot.reader,
-    dshPricing: dshPricingMetadata(snapshot),
-    dshAstraPricing: dshAstraPricingMetadata(snapshot),
+    ...usagePricingMetadata(snapshot),
     // An external-only re-export must not claim the local reader repriced it.
     readerVersion:
       devices.length === 1

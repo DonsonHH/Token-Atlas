@@ -53,15 +53,15 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function rawModelNames(value: unknown): string[] {
+  return asArray(value).flatMap((item) => {
+    const name = asString(item);
+    return name ? [name] : [];
+  });
+}
+
 function modelNames(value: unknown): string[] {
-  return [
-    ...new Set(
-      asArray(value).flatMap((item) => {
-        const name = asString(item);
-        return name ? [canonicalModelName(name)] : [];
-      }),
-    ),
-  ].sort();
+  return [...new Set(rawModelNames(value).map(canonicalModelName))].sort();
 }
 
 export function usageTotalsFrom(value: unknown): UsageTotals {
@@ -131,54 +131,88 @@ function periodLabel(record: UnknownRecord): string {
   );
 }
 
+function rawModelEntries(record: UnknownRecord): [string, UnknownRecord][] {
+  const direct = Object.entries(asRecord(record.models));
+  if (direct.length)
+    return direct.map(([name, model]) => [name, asRecord(model)]);
+  const list = asArray(record.models);
+  return (list.length ? list : asArray(record.modelBreakdowns)).flatMap(
+    (entry) => {
+      const model = asRecord(entry);
+      const name = asString(model.modelName) ?? asString(model.name);
+      return name ? [[name, model]] : [];
+    },
+  );
+}
+
 function modelMap(
-  value: unknown,
-  fallback: unknown = [],
+  entries: ReturnType<typeof rawModelEntries>,
+  reportUnpriced: ReadonlySet<string>,
+  scopedUnpriced: ReadonlySet<string>,
 ): Record<string, UsageModelTotals> {
-  const directModels = Object.entries(asRecord(value));
-  const fallbackModels = asArray(value).length
-    ? asArray(value)
-    : asArray(fallback);
   const models = new Map<string, UsageModelTotals>();
 
-  function addModel(rawName: string, rawModel: UnknownRecord) {
+  for (const [rawName, rawModel] of entries) {
     // Agent-specific entries and API/version aliases carry distinct usage.
     const name = canonicalModelName(rawName);
     const previous = models.get(name);
     const totals = usageTotalsFrom(rawModel);
+    const identifier = rawName.trim();
+    const missingPricing =
+      rawModel.missingPricing === true ||
+      Boolean(totals.unpricedModels?.length) ||
+      (rawModel.missingPricing !== false &&
+        totals.totalTokens > 0 &&
+        reportUnpriced.has(identifier) &&
+        (!scopedUnpriced.has(identifier) || totals.costUSD <= 0));
     models.set(name, {
       ...(previous ? addUsageTotals(previous, totals) : totals),
       isFallback: Boolean(previous?.isFallback || rawModel.isFallback === true),
-      ...(previous?.missingPricing || rawModel.missingPricing === true
+      ...(previous?.missingPricing || missingPricing
         ? { missingPricing: true }
         : {}),
     });
   }
 
-  if (directModels.length) {
-    for (const [name, model] of directModels) addModel(name, asRecord(model));
-  } else {
-    for (const model of fallbackModels) {
-      const rawModel = asRecord(model);
-      const name = asString(rawModel.modelName) ?? asString(rawModel.name);
-      if (name) addModel(name, rawModel);
+  return Object.fromEntries(models);
+}
+
+/** Match report hints to raw names. Scoped evidence keeps priced rows separate. */
+function pricedModelRows(records: UnknownRecord[], unpriced: unknown) {
+  const rows = records.map((record) => ({
+    record,
+    entries: rawModelEntries(record),
+  }));
+  const reportUnpriced = new Set(rawModelNames(unpriced));
+  const scopedUnpriced = new Set<string>();
+  if (reportUnpriced.size) {
+    for (const { record, entries } of rows) {
+      for (const name of rawModelNames(record.unpricedModels)) {
+        scopedUnpriced.add(name);
+      }
+      for (const [name, model] of entries) {
+        if (
+          model.missingPricing === true ||
+          rawModelNames(model.unpricedModels).length
+        ) {
+          scopedUnpriced.add(name.trim());
+        }
+      }
     }
   }
-  return Object.fromEntries(models);
+  return rows.map(({ record, entries }) => ({
+    record,
+    models: modelMap(entries, reportUnpriced, scopedUnpriced),
+  }));
 }
 
 function pricedTotals(
   record: UnknownRecord,
   models: Record<string, UsageModelTotals>,
-  reportUnpriced: string[] = [],
 ): UsageTotals {
   const totals = usageTotalsFrom(record);
   const missingModels = Object.entries(models)
-    .filter(
-      ([name, model]) =>
-        model.missingPricing ||
-        (reportUnpriced.includes(name) && model.totalTokens > 0),
-    )
+    .filter(([, model]) => model.missingPricing)
     .map(([name]) => name);
   const unpricedModels = modelNames([
     ...(totals.unpricedModels ?? []),
@@ -197,39 +231,33 @@ function pricedTotals(
 }
 
 export function usagePeriodsFrom(report: unknown, key: string): UsagePeriod[] {
-  const unpriced = modelNames(asRecord(asRecord(report).totals).unpricedModels);
-  return asArray(asRecord(report)[key])
-    .map((entry) => {
-      const record = asRecord(entry);
-      const models = modelMap(record.models, record.modelBreakdowns);
-
-      return {
-        ...pricedTotals(record, models, unpriced),
-        label: periodLabel(record),
-        models,
-      };
-    })
-    .filter((period) => key !== "daily" || validDateKey(period.label))
+  const rawReport = asRecord(report);
+  const records = asArray(rawReport[key])
+    .map(asRecord)
+    .filter((record) => key !== "daily" || validDateKey(periodLabel(record)));
+  return pricedModelRows(records, asRecord(rawReport.totals).unpricedModels)
+    .map(({ record, models }) => ({
+      ...pricedTotals(record, models),
+      label: periodLabel(record),
+      models,
+    }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function usageSessionsFrom(report: unknown): UsageSession[] {
   const rawReport = asRecord(report);
   const rawSessions = asArray(rawReport.sessions);
+  const records = (
+    rawSessions.length ? rawSessions : asArray(rawReport.session)
+  ).map(asRecord);
 
-  return (rawSessions.length ? rawSessions : asArray(rawReport.session))
-    .map((entry) => {
-      const record = asRecord(entry);
-      const models = modelMap(record.models, record.modelBreakdowns);
+  return pricedModelRows(records, asRecord(rawReport.totals).unpricedModels)
+    .map(({ record, models }) => {
       const reportedModels = modelNames(record.modelsUsed);
       const metadata = asRecord(record.metadata);
 
       return {
-        ...pricedTotals(
-          record,
-          models,
-          modelNames(asRecord(rawReport.totals).unpricedModels),
-        ),
+        ...pricedTotals(record, models),
         id:
           asString(record.sessionId) ??
           asString(record.sessionFile) ??

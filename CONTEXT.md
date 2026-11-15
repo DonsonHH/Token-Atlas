@@ -40,9 +40,12 @@ Product copy is Chinese and deliberately brief.
   unpriced. No implicit FX conversion.
 - Normalize `deepseek-v4.1-flash` to `deepseek-flash` in report models, session
   names and pricing diagnostics. This only groups existing usage, without
-  repricing imports or merging older V4 Flash generations.
+  repricing imports or merging older V4 Flash generations. Match report-wide
+  price hints to raw names before grouping; row-level diagnostics take precedence.
+  Session search accepts either name.
 - Official API-equivalent estimates are not gateway bills. Keep the source,
-  check date and current-rate-card basis visible; never read DSH credentials.
+  check date and current-rate-card basis visible. Show the Astra card only when
+  a complete, consistent request in scope actually used it; never read DSH credentials.
 
 ## Modules
 

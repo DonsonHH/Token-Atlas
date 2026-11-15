@@ -182,6 +182,66 @@ test("DSH Astra preserves stored cost and leaves incomplete token breakdowns unp
     assert.equal(report.daily[0].totalTokens, 600_125);
     assert.equal(report.daily[0].costUSD, 0.125);
     assert.deepEqual(report.daily[0].unpricedModels, ["gpt-6-astra"]);
+    const snapshot = assembleUsageSnapshot({
+      range,
+      source: "dsh",
+      device: "local",
+      local: report,
+      imports: { devices: [], dailyByDevice: {}, warnings: [] },
+    });
+    assert.equal(
+      buildUsageViewExport(snapshot, "dsh").dshAstraPricing,
+      undefined,
+    );
+  }));
+
+test("DSH Astra does not estimate missing or contradictory billing counters", async () =>
+  fixture(async (home) => {
+    const cases = [
+      { inputTokens: 100 },
+      { outputTokens: 100 },
+      { inputTokens: 100, outputTokens: 20 },
+      {
+        inputTokens: 1_000,
+        outputTokens: 0,
+        reasoningTokens: 400,
+        totalTokens: 1_000,
+      },
+    ];
+    const events = cases.map((usage, index) => {
+      const sample = event(`astra-${index}`);
+      sample.data.message.source.model = "gpt-6-astra";
+      return { ...sample, data: { ...sample.data, usage } };
+    });
+    await log(home, "unsafe-astra", [header("unsafe-astra"), ...events]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].totalTokens, 1_320);
+    assert.equal(report.daily[0].costUSD, 0);
+    assert.deepEqual(report.daily[0].unpricedModels, ["gpt-6-astra"]);
+  }));
+
+test("DSH Astra can estimate when cache counts are known or reconciled by an exact total", async () =>
+  fixture(async (home) => {
+    const cases = [
+      { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    ];
+    const events = cases.map((usage, index) => {
+      const sample = event(`complete-${index}`);
+      sample.data.message.source.model = "gpt-6-astra";
+      return { ...sample, data: { ...sample.data, usage } };
+    });
+    await log(home, "complete-astra", [header("complete-astra"), ...events]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].totalTokens, 30);
+    assert.equal(report.daily[0].costUSD, 0.0007);
+    assert.equal(report.daily[0].unpricedModels, undefined);
+    assert.equal(report.sessions[0].hasAstraEstimate, true);
   }));
 
 test("DSH groups both Flash names in a single model and a single session filter", async () =>

@@ -19,8 +19,7 @@ import {
 } from "@/lib/usage-types";
 import { formatDate, formatTokens } from "@/lib/format";
 import { ImportSheet } from "./import-sheet";
-import { dshPricingMetadata } from "@/lib/deepseek-pricing";
-import { dshAstraPricingMetadata } from "@/lib/astra-pricing";
+import { usagePricingMetadata } from "@/lib/usage-export";
 
 export function SourcesPage({
   snapshot,
@@ -33,8 +32,8 @@ export function SourcesPage({
 }) {
   const [importTarget, setImportTarget] = useState<string | null>(null);
   const [audit, setAudit] = useState(false);
-  const pricing = dshPricingMetadata(snapshot);
-  const astraPricing = dshAstraPricingMetadata(snapshot);
+  const { dshPricing: pricing, dshAstraPricing: astraPricing } =
+    usagePricingMetadata(snapshot);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">

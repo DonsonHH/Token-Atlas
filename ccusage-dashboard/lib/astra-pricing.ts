@@ -67,7 +67,8 @@ export function dshAstraPricingMetadata(
   if (
     snapshot.activeDeviceIds.includes("local") &&
     snapshot.sessions.some(
-      ({ source, models }) => source === "dsh" && models.some(isAstra),
+      ({ source, hasAstraEstimate }) =>
+        source === "dsh" && hasAstraEstimate === true,
     )
   )
     return astraPricingReference;

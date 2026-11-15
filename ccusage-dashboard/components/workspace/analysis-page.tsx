@@ -26,8 +26,7 @@ import {
 import type { UsageSnapshot } from "@/lib/usage-types";
 import type { WorkspaceState } from "@/lib/workspace-state";
 import { pricingState, referenceCostLabel } from "@/lib/usage-pricing";
-import { dshPricingMetadata } from "@/lib/deepseek-pricing";
-import { dshAstraPricingMetadata } from "@/lib/astra-pricing";
+import { usagePricingMetadata } from "@/lib/usage-export";
 import { Choice, Segmented } from "./controls";
 import { TrendChart } from "./trend-chart";
 
@@ -64,8 +63,7 @@ export function AnalysisPage({
           grain: state.grain,
           readerVersion: snapshot.readerVersion,
           reader: snapshot.reader,
-          dshPricing: dshPricingMetadata(snapshot),
-          dshAstraPricing: dshAstraPricingMetadata(snapshot),
+          ...usagePricingMetadata(snapshot),
           warnings: snapshot.warnings,
           periods,
         },

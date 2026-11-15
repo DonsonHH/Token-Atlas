@@ -53,7 +53,7 @@ function usageFrom(
   value: unknown,
   model: string,
   at: Date,
-): UsageTotals | null {
+): { totals: UsageTotals; hasAstraEstimate: boolean } | null {
   const usage = record(value);
   if (!numericFields.some((field) => usage[field] !== undefined)) return null;
   for (const key of numericFields) {
@@ -85,22 +85,45 @@ function usageFrom(
     cacheCreationTokens,
     totalTokens,
   };
-  const costUSD =
+  const reasoningOutputTokens = tokenAlias(
+    usage,
+    "reasoningTokens",
+    "reasoningOutputTokens",
+  );
+  const recordedCost =
     typeof usage.costUSD === "number" &&
     Number.isFinite(usage.costUSD) &&
     usage.costUSD >= 0
       ? usage.costUSD
-      : (astraReferenceCostUSD(model, counts) ??
-        deepseekReferenceCostUSD(model, counts, at));
+      : null;
+  // Missing counters are fine for display, but cannot establish an Astra price.
+  // Cache buckets are optional in DSH; without both, require an exact total
+  // that the rate card can reconcile with the known buckets.
+  const hasCacheEvidence =
+    typeof usage.totalTokens === "number" ||
+    (typeof usage.cacheReadTokens === "number" &&
+      (typeof usage.cacheWriteTokens === "number" ||
+        typeof usage.cacheCreationTokens === "number"));
+  const astraCost =
+    recordedCost === null &&
+    typeof usage.inputTokens === "number" &&
+    typeof usage.outputTokens === "number" &&
+    hasCacheEvidence &&
+    reasoningOutputTokens <= outputTokens
+      ? astraReferenceCostUSD(model, counts)
+      : null;
+  const costUSD =
+    recordedCost ?? astraCost ?? deepseekReferenceCostUSD(model, counts, at);
   return {
-    ...counts,
-    reasoningOutputTokens: tokenAlias(
-      usage,
-      "reasoningTokens",
-      "reasoningOutputTokens",
-    ),
-    costUSD: costUSD ?? 0,
-    ...(costUSD === null && totalTokens > 0 ? { unpricedModels: [model] } : {}),
+    totals: {
+      ...counts,
+      reasoningOutputTokens,
+      costUSD: costUSD ?? 0,
+      ...(costUSD === null && totalTokens > 0
+        ? { unpricedModels: [model] }
+        : {}),
+    },
+    hasAstraEstimate: astraCost !== null,
   };
 }
 
@@ -113,6 +136,7 @@ async function readSession(file: string, version: number, range: UsageRange) {
   const seen = new Set<string>();
   let daily = new Map<string, UsagePeriod>();
   let totals = createEmptyTotals();
+  let hasAstraEstimate = false;
   let lastActivity: string | null = null;
   const models = new Set<string>();
   function consume(line: string) {
@@ -143,6 +167,7 @@ async function readSession(file: string, version: number, range: UsageRange) {
       boundarySeen = true;
       daily = new Map();
       totals = createEmptyTotals();
+      hasAstraEstimate = false;
       lastActivity = null;
       models.clear();
       seen.clear();
@@ -164,8 +189,9 @@ async function readSession(file: string, version: number, range: UsageRange) {
       typeof event.time === "number" || typeof event.time === "string"
         ? new Date(event.time)
         : new Date(NaN);
-    const usage = usageFrom(data.usage ?? message.usage, model, date);
-    if (!usage || !usage.totalTokens) return;
+    const request = usageFrom(data.usage ?? message.usage, model, date);
+    if (!request || !request.totals.totalTokens) return;
+    const usage = request.totals;
     if (!Number.isFinite(date.getTime())) throw new Error("用量时间无效");
     const label = dateKey(date, range.timezone);
     if (label > range.end || (!range.allTime && label < range.start)) return;
@@ -175,6 +201,7 @@ async function readSession(file: string, version: number, range: UsageRange) {
     if (!identity) throw new Error("用量消息缺少标识");
     if (seen.has(identity)) return;
     seen.add(identity);
+    hasAstraEstimate ||= request.hasAstraEstimate;
     const previous = daily.get(label);
     const previousModel =
       previous && Object.hasOwn(previous.models, model)
@@ -238,6 +265,7 @@ async function readSession(file: string, version: number, range: UsageRange) {
     throw new Error("继承历史边界缺失");
   const session: UsageSession = {
     ...totals,
+    ...(hasAstraEstimate ? { hasAstraEstimate: true } : {}),
     id: `dsh:${header.id}`,
     source: "dsh",
     project: text(header.cwd) ?? null,
