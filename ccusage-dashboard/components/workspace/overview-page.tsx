@@ -149,7 +149,7 @@ export function OverviewPage({
                 ? "已定价部分 · 存在价格缺失"
                 : "缺少可确认的模型价格"
           }
-          hint="参考价来自 ccusage、日志明确记录的美元费用或 DeepSeek 官网美元价。DSH 按北京时间峰谷价估算，不等于网关账单；未知价格仍待定价。"
+          hint="参考价来自 ccusage、日志记录费用或 DSH 的官网价估算。DSH 中的 DeepSeek 按北京时间峰谷，Astra 按 OpenAI Standard 和默认缓存写入价；均不等于网关账单。"
         />
       </section>
       <DashboardPanel

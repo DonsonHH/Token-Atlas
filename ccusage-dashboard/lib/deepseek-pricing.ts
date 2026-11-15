@@ -1,4 +1,5 @@
 import type { UsageTotals, UsageSnapshot } from "./usage-types";
+import { canonicalModelName } from "./model-names";
 
 /** A checked rate-card snapshot, not a reconstruction of historical invoices. */
 export const deepseekPricingReference = {
@@ -41,8 +42,6 @@ const aliases = new Map<string, "flash" | "pro">([
   ["deepseek-flash", "flash"],
   ["deepseek-v4-flash", "flash"],
   ["deepseek-v4-flash-vision-exp", "flash"],
-  // DSH/provider spelling of the documented DeepSeek-V4.1-Flash family.
-  ["deepseek-v4.1-flash", "flash"],
   ["deepseek-v4.1-flash-1017", "flash"],
   ["deepseek-v4-pro", "pro"],
   ["deepseek-v4-pro-0813", "pro"],
@@ -79,7 +78,7 @@ export function deepseekReferenceCostUSD(
   at: Date,
 ): number | null {
   const family = aliases.get(
-    model
+    canonicalModelName(model)
       .trim()
       .toLowerCase()
       .replace(/^deepseek\//, ""),

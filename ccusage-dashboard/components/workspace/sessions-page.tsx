@@ -38,6 +38,7 @@ import {
 import { downloadJsonFile } from "@/lib/download";
 import { referenceCostLabel } from "@/lib/usage-pricing";
 import { dshPricingMetadata } from "@/lib/deepseek-pricing";
+import { dshAstraPricingMetadata } from "@/lib/astra-pricing";
 import type { UsageSession, UsageSnapshot } from "@/lib/usage-types";
 import { usageSourceLabel } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
@@ -112,6 +113,10 @@ export function SessionsPage({
         range: snapshot.range,
         source: snapshot.source,
         dshPricing: dshPricingMetadata(snapshot),
+        dshAstraPricing: dshAstraPricingMetadata({
+          activeDeviceIds: snapshot.activeDeviceIds,
+          sessions: rows,
+        }),
         model,
         search: query,
         sessions: rows,

@@ -8,6 +8,7 @@ export const usageSourceOptions = [
   { command: "amp", label: "Amp", value: "amp" },
   { command: "droid", label: "Droid", value: "droid" },
   { command: "codebuff", label: "Codebuff", value: "codebuff" },
+  { command: "cline", label: "Cline", value: "cline" },
   { command: "hermes", label: "Hermes Agent", value: "hermes" },
   { command: "pi", label: "pi-agent", value: "pi" },
   { command: "goose", label: "Goose", value: "goose" },

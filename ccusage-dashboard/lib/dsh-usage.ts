@@ -11,6 +11,8 @@ import {
 } from "./usage-domain";
 import { dateKey, type UsageRange } from "./usage-range";
 import { deepseekReferenceCostUSD } from "./deepseek-pricing";
+import { astraReferenceCostUSD } from "./astra-pricing";
+import { canonicalModelName } from "./model-names";
 import type {
   LocalUsageReport,
   UsagePeriod,
@@ -76,24 +78,22 @@ function usageFrom(
   );
   if (!Number.isSafeInteger(totalTokens))
     throw new Error("用量超出安全整数范围");
-  const recordedCost =
-    typeof usage.costUSD === "number" &&
-    Number.isFinite(usage.costUSD) &&
-    usage.costUSD >= 0;
-  const officialCost = recordedCost
-    ? null
-    : deepseekReferenceCostUSD(
-        model,
-        { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens },
-        at,
-      );
-  const costUSD = recordedCost ? (usage.costUSD as number) : officialCost;
-  return {
+  const counts = {
     inputTokens,
     outputTokens,
     cacheReadTokens,
     cacheCreationTokens,
     totalTokens,
+  };
+  const costUSD =
+    typeof usage.costUSD === "number" &&
+    Number.isFinite(usage.costUSD) &&
+    usage.costUSD >= 0
+      ? usage.costUSD
+      : (astraReferenceCostUSD(model, counts) ??
+        deepseekReferenceCostUSD(model, counts, at));
+  return {
+    ...counts,
     reasoningOutputTokens: tokenAlias(
       usage,
       "reasoningTokens",
@@ -157,8 +157,9 @@ async function readSession(file: string, version: number, range: UsageRange) {
     if (event.type !== "assistant/message") return;
     const message = record(data.message);
     const source = record(message.source);
-    const model =
-      text(source.model) ?? text(data.model) ?? activeModel ?? "DSH / 未知模型";
+    const model = canonicalModelName(
+      text(source.model) ?? text(data.model) ?? activeModel ?? "DSH / 未知模型",
+    );
     const date =
       typeof event.time === "number" || typeof event.time === "string"
         ? new Date(event.time)

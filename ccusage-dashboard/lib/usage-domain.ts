@@ -8,6 +8,7 @@ import type {
 } from "./usage-types";
 import { validDateKey } from "./usage-range";
 import { usageSourceOptions } from "./usage-types";
+import { canonicalModelName } from "./model-names";
 
 type UnknownRecord = Record<string, unknown>;
 type UsageModelTotals = UsageTotals & {
@@ -55,10 +56,10 @@ function asString(value: unknown): string | null {
 function modelNames(value: unknown): string[] {
   return [
     ...new Set(
-      asArray(value).filter(
-        (name): name is string =>
-          typeof name === "string" && Boolean(name.trim()),
-      ),
+      asArray(value).flatMap((item) => {
+        const name = asString(item);
+        return name ? [canonicalModelName(name)] : [];
+      }),
     ),
   ].sort();
 }
@@ -76,6 +77,7 @@ export function usageTotalsFrom(value: unknown): UsageTotals {
   const totalTokens =
     asNumber(record.totalTokens) ||
     inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
+  const unpricedModels = modelNames(record.unpricedModels);
   // Reasoning is a subset of output in ccusage, not another additive bucket.
 
   return {
@@ -89,9 +91,7 @@ export function usageTotalsFrom(value: unknown): UsageTotals {
     outputTokens,
     reasoningOutputTokens,
     totalTokens,
-    ...(modelNames(record.unpricedModels).length
-      ? { unpricedModels: modelNames(record.unpricedModels) }
-      : {}),
+    ...(unpricedModels.length ? { unpricedModels } : {}),
     ...(record.pricingUnknown === true ? { pricingUnknown: true } : {}),
   };
 }
@@ -100,6 +100,10 @@ export function addUsageTotals(
   left: UsageTotals,
   right: UsageTotals,
 ): UsageTotals {
+  const unpricedModels = modelNames([
+    ...(left.unpricedModels ?? []),
+    ...(right.unpricedModels ?? []),
+  ]);
   return {
     cacheCreationTokens: left.cacheCreationTokens + right.cacheCreationTokens,
     cacheReadTokens: left.cacheReadTokens + right.cacheReadTokens,
@@ -109,17 +113,7 @@ export function addUsageTotals(
     reasoningOutputTokens:
       left.reasoningOutputTokens + right.reasoningOutputTokens,
     totalTokens: left.totalTokens + right.totalTokens,
-    ...(modelNames([
-      ...(left.unpricedModels ?? []),
-      ...(right.unpricedModels ?? []),
-    ]).length
-      ? {
-          unpricedModels: modelNames([
-            ...(left.unpricedModels ?? []),
-            ...(right.unpricedModels ?? []),
-          ]),
-        }
-      : {}),
+    ...(unpricedModels.length ? { unpricedModels } : {}),
     ...(left.pricingUnknown || right.pricingUnknown
       ? { pricingUnknown: true }
       : {}),
@@ -142,37 +136,14 @@ function modelMap(
   fallback: unknown = [],
 ): Record<string, UsageModelTotals> {
   const directModels = Object.entries(asRecord(value));
-
-  if (directModels.length) {
-    return Object.fromEntries(
-      directModels.map(([name, model]) => {
-        const rawModel = asRecord(model);
-
-        return [
-          name,
-          {
-            ...usageTotalsFrom(rawModel),
-            isFallback: rawModel.isFallback === true,
-            ...(rawModel.missingPricing === true
-              ? { missingPricing: true }
-              : {}),
-          },
-        ];
-      }),
-    );
-  }
-
   const fallbackModels = asArray(value).length
     ? asArray(value)
     : asArray(fallback);
   const models = new Map<string, UsageModelTotals>();
 
-  for (const model of fallbackModels) {
-    const rawModel = asRecord(model);
-    const name = asString(rawModel.modelName) ?? asString(rawModel.name);
-    if (!name) continue;
-
-    // Unified reports can repeat a model once per Agent. Preserve all entries.
+  function addModel(rawName: string, rawModel: UnknownRecord) {
+    // Agent-specific entries and API/version aliases carry distinct usage.
+    const name = canonicalModelName(rawName);
     const previous = models.get(name);
     const totals = usageTotalsFrom(rawModel);
     models.set(name, {
@@ -184,6 +155,15 @@ function modelMap(
     });
   }
 
+  if (directModels.length) {
+    for (const [name, model] of directModels) addModel(name, asRecord(model));
+  } else {
+    for (const model of fallbackModels) {
+      const rawModel = asRecord(model);
+      const name = asString(rawModel.modelName) ?? asString(rawModel.name);
+      if (name) addModel(name, rawModel);
+    }
+  }
   return Object.fromEntries(models);
 }
 
@@ -241,9 +221,7 @@ export function usageSessionsFrom(report: unknown): UsageSession[] {
     .map((entry) => {
       const record = asRecord(entry);
       const models = modelMap(record.models, record.modelBreakdowns);
-      const reportedModels = asArray(record.modelsUsed).filter(
-        (model): model is string => typeof model === "string",
-      );
+      const reportedModels = modelNames(record.modelsUsed);
       const metadata = asRecord(record.metadata);
 
       return {

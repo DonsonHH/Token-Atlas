@@ -4,6 +4,7 @@ import type {
   UsageSource,
 } from "./usage-types";
 import { dshPricingMetadata } from "./deepseek-pricing";
+import { dshAstraPricingMetadata } from "./astra-pricing";
 
 export type UsageViewExport = Pick<
   UsageSnapshot,
@@ -22,6 +23,7 @@ export type UsageViewExport = Pick<
   devices: UsageSnapshot["devices"];
   source: UsageSource;
   dshPricing?: ReturnType<typeof dshPricingMetadata>;
+  dshAstraPricing?: ReturnType<typeof dshAstraPricingMetadata>;
 };
 
 export function buildUsageViewExport(
@@ -36,6 +38,7 @@ export function buildUsageViewExport(
     range: snapshot.range,
     reader: snapshot.reader,
     dshPricing: dshPricingMetadata(snapshot),
+    dshAstraPricing: dshAstraPricingMetadata(snapshot),
     // An external-only re-export must not claim the local reader repriced it.
     readerVersion:
       devices.length === 1

@@ -32,10 +32,15 @@ Product copy is Chinese and deliberately brief.
   all-Agent views; source=dsh bypasses ccusage. Only completed usage from the
   highest supported session generation counts, after the last explicitly tagged
   inherited cut. Untagged restore boundaries must never erase owned usage.
-- DSH preserves explicitly recorded costUSD; otherwise known DeepSeek models
-  use the checked official USD rate card per event, before aggregation. Pricing
-  follows Beijing peak periods, weekends and verified Chinese holidays, never
-  the display timezone. Unknown rates stay unpriced. No implicit FX conversion.
+- DSH preserves explicitly recorded costUSD; otherwise supported models use
+  checked official USD rates per request, before aggregation. DeepSeek uses
+  Beijing peak periods and verified holidays; Astra estimates use OpenAI
+  Standard and default 30-minute cache writes, with the long-context threshold
+  applied to uncached input plus cache reads and writes. Unknown rates stay
+  unpriced. No implicit FX conversion.
+- Normalize `deepseek-v4.1-flash` to `deepseek-flash` in report models, session
+  names and pricing diagnostics. This only groups existing usage, without
+  repricing imports or merging older V4 Flash generations.
 - Official API-equivalent estimates are not gateway bills. Keep the source,
   check date and current-rate-card basis visible; never read DSH credentials.
 

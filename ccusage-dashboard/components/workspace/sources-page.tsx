@@ -20,6 +20,7 @@ import {
 import { formatDate, formatTokens } from "@/lib/format";
 import { ImportSheet } from "./import-sheet";
 import { dshPricingMetadata } from "@/lib/deepseek-pricing";
+import { dshAstraPricingMetadata } from "@/lib/astra-pricing";
 
 export function SourcesPage({
   snapshot,
@@ -33,6 +34,7 @@ export function SourcesPage({
   const [importTarget, setImportTarget] = useState<string | null>(null);
   const [audit, setAudit] = useState(false);
   const pricing = dshPricingMetadata(snapshot);
+  const astraPricing = dshAstraPricingMetadata(snapshot);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -200,6 +202,20 @@ export function SourcesPage({
             </a>{" "}
             · 北京时间峰谷 · 核对于 {pricing.checkedAt} ·
             按当前价格回算，非实际账单
+          </p>
+        ) : null}
+        {astraPricing ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            DSH Astra：
+            <a
+              className="underline underline-offset-4"
+              href={astraPricing.source}
+              target="_blank"
+              rel="noreferrer"
+            >
+              OpenAI 官网美元价
+            </a>{" "}
+            · 核对日期 {astraPricing.checkedAt} · {astraPricing.basis}
           </p>
         ) : null}
       </DashboardPanel>

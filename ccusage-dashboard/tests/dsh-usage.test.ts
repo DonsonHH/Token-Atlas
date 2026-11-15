@@ -99,6 +99,105 @@ test("DSH is a distinct selectable source instead of silently falling back to al
   );
 });
 
+test("DSH estimates unpriced Astra requests including cache writes and the long-context rate", async () =>
+  fixture(async (home) => {
+    for (const [id, inputTokens] of [
+      ["short", 170_000],
+      ["long", 170_001],
+    ] as const) {
+      const sample = event(id);
+      sample.data.message.source.model = "gpt-6-astra";
+      await log(home, id, [
+        header(id),
+        {
+          ...sample,
+          data: {
+            ...sample.data,
+            usage: {
+              inputTokens,
+              cacheReadTokens: 100_000,
+              cacheWriteTokens: 2_000,
+              outputTokens: 2_000,
+              reasoningTokens: 1_500,
+              totalTokens: inputTokens + 104_000,
+            },
+          },
+        },
+      ]);
+    }
+    const report = await readDshUsage(range, home);
+    assert.equal(
+      report.sessions.find(({ id }) => id === "dsh:short")?.costUSD,
+      1.925,
+    );
+    assert.equal(
+      report.sessions.find(({ id }) => id === "dsh:long")?.costUSD,
+      3.80002,
+    );
+    assert.equal(report.daily[0].totalTokens, 548_001);
+    assert.ok(Math.abs(report.daily[0].costUSD - 5.72502) < 1e-10);
+    assert.equal(report.daily[0].unpricedModels, undefined);
+    const snapshot = assembleUsageSnapshot({
+      range,
+      source: "dsh",
+      device: "local",
+      local: report,
+      imports: { devices: [], dailyByDevice: {}, warnings: [] },
+    });
+    assert.equal(
+      buildUsageViewExport(snapshot, "dsh").dshAstraPricing?.serviceTier,
+      "standard",
+    );
+    assert.equal(snapshot.warnings.length, 0);
+  }));
+
+test("DSH Astra preserves stored cost and leaves incomplete token breakdowns unpriced", async () =>
+  fixture(async (home) => {
+    const stored = event("stored-astra");
+    stored.data.message.source.model = "gpt-6-astra";
+    const incomplete = event("incomplete-astra");
+    incomplete.data.message.source.model = "gpt-6-astra";
+    await log(home, "stored-astra", [
+      header("stored-astra"),
+      {
+        ...stored,
+        data: {
+          ...stored.data,
+          usage: { ...stored.data.usage, costUSD: 0.125 },
+        },
+      },
+    ]);
+    await log(home, "incomplete-astra", [
+      header("incomplete-astra"),
+      {
+        ...incomplete,
+        data: { ...incomplete.data, usage: { totalTokens: 600_000 } },
+      },
+    ]);
+    const report = await readDshUsage(range, home);
+    assert.equal(
+      report.sessions.find(({ id }) => id === "dsh:stored-astra")?.costUSD,
+      0.125,
+    );
+    assert.equal(report.daily[0].totalTokens, 600_125);
+    assert.equal(report.daily[0].costUSD, 0.125);
+    assert.deepEqual(report.daily[0].unpricedModels, ["gpt-6-astra"]);
+  }));
+
+test("DSH groups both Flash names in a single model and a single session filter", async () =>
+  fixture(async (home) => {
+    const publicName = event("public-name");
+    const versionName = event("version-name");
+    publicName.data.message.source.model = "deepseek-flash";
+    versionName.data.message.source.model = "deepseek-v4.1-flash";
+    await log(home, "flash", [header("flash"), publicName, versionName]);
+    const report = await readDshUsage(range, home);
+    assert.deepEqual(report.sessions[0].models, ["deepseek-flash"]);
+    assert.deepEqual(Object.keys(report.daily[0].models), ["deepseek-flash"]);
+    assert.equal(report.daily[0].models["deepseek-flash"].totalTokens, 250);
+    assert.equal(report.daily[0].models["deepseek-flash"].costUSD, 0.00003612);
+  }));
+
 test("DSH normalizes native cacheWriteTokens and reasoningTokens without inventing a write price", async () =>
   fixture(async (home) => {
     const sample = event("native-fields");

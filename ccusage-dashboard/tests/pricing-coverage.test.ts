@@ -16,6 +16,68 @@ import { validateUsageImport } from "../lib/usage-import-validation";
 import { pricingState, referenceCostLabel } from "../lib/usage-pricing";
 import { buildUsageViewExport } from "../lib/usage-export";
 
+test("ccusage and imported Flash aliases share one model without losing costs or missing-price diagnostics", () => {
+  const [native] = usagePeriodsFrom(
+    {
+      daily: [
+        {
+          date: "2026-11-10",
+          totalTokens: 78,
+          totalCost: 0.5,
+          modelBreakdowns: [
+            { modelName: "deepseek-flash", totalTokens: 30, cost: 0.5 },
+            {
+              modelName: "deepseek-v4.1-flash",
+              totalTokens: 40,
+              cost: 0,
+              missingPricing: true,
+            },
+            { modelName: "deepseek-v4-flash", totalTokens: 5 },
+            { modelName: "deepseek-v4-pro", totalTokens: 3 },
+          ],
+        },
+      ],
+      totals: { unpricedModels: ["deepseek-v4.1-flash"] },
+    },
+    "daily",
+  );
+  assert.equal(native.totalTokens, 78);
+  assert.equal(native.costUSD, 0.5);
+  assert.deepEqual(native.unpricedModels, ["deepseek-flash"]);
+  assert.equal(native.models["deepseek-flash"].totalTokens, 70);
+  assert.equal(native.models["deepseek-flash"].costUSD, 0.5);
+  assert.equal(native.models["deepseek-flash"].missingPricing, true);
+  assert.equal(native.models["deepseek-v4-flash"].totalTokens, 5);
+  assert.equal(native.models["deepseek-v4-pro"].totalTokens, 3);
+
+  const imported = validateUsageImport(
+    {
+      daily: [
+        {
+          date: "2026-11-10",
+          totalTokens: 70,
+          costUSD: 0.75,
+          models: {
+            "deepseek-v4.1-flash": { totalTokens: 40, costUSD: 0.5 },
+            "deepseek-flash": { totalTokens: 30, costUSD: 0.25 },
+          },
+        },
+      ],
+    },
+    "External",
+    "codex",
+  );
+  assert.deepEqual(Object.keys(imported.daily[0].models), ["deepseek-flash"]);
+  assert.equal(imported.daily[0].models["deepseek-flash"].totalTokens, 70);
+  assert.equal(imported.daily[0].models["deepseek-flash"].costUSD, 0.75);
+  assert.deepEqual(
+    usageSessionsFrom({
+      sessions: [{ modelsUsed: ["deepseek-v4.1-flash", "deepseek-flash"] }],
+    })[0].models,
+    ["deepseek-flash"],
+  );
+});
+
 const report = {
   daily: [
     {
