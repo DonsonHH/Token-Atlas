@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { usagePeriodsFrom, usageSessionsFrom } from "../lib/usage-domain";
+import {
+  mergeUsagePeriods,
+  usagePeriodsFrom,
+  usageSessionsFrom,
+} from "../lib/usage-domain";
 import { assembleUsageSnapshot } from "../lib/usage-snapshot";
 import { resolveUsageRange } from "../lib/usage-range";
 import { describeCodexPricing, withCodexPricing } from "../lib/ccusage-pricing";
@@ -69,6 +73,7 @@ async function readReport(
   command: string,
   bounds: string[] = [],
   unified = false,
+  modelAliases?: string,
 ) {
   const { stdout } = await exec(
     process.execPath,
@@ -88,6 +93,7 @@ async function readReport(
       cwd: home,
       env: {
         NODE_ENV: "test",
+        CCUSAGE_MODEL_ALIASES: modelAliases,
         SystemRoot: process.env.SystemRoot,
         CODEX_HOME: home,
         HOME: home,
@@ -305,7 +311,12 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
     const bounds = ["--since", "2026-11-18", "--until", "2026-11-18"];
     await writeRollout(fixtureDir, ".ccusage/ccusage.json", "{}");
     const [focused, unified, fast] = await withCodexPricing(
-      { source: "all", version: ccusagePackage.version, cwd: fixtureDir },
+      {
+        source: "all",
+        version: ccusagePackage.version,
+        cwd: fixtureDir,
+        modelAliases: "",
+      },
       ({ path }) => {
         const flags = path ? [...bounds, "--config", path] : bounds;
         return Promise.all([
@@ -379,6 +390,28 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
         .codexPricing,
       undefined,
     );
+    const unpricedOtherAgent = usagePeriodsFrom(
+      {
+        daily: [
+          {
+            date: "2026-11-18",
+            totalTokens: 10,
+            models: {
+              "gpt-6.2-sol": { totalTokens: 10, missingPricing: true },
+            },
+          },
+        ],
+      },
+      "daily",
+    );
+    const mixedDaily = mergeUsagePeriods(local.daily, unpricedOtherAgent);
+    assert.deepEqual(mixedDaily[0].unpricedModels, ["gpt-6.2-sol"]);
+    const mixedPricing = describeCodexPricing(
+      "all",
+      { daily: mixedDaily, sessions },
+      supplemented,
+    );
+    assert.deepEqual(mixedPricing?.dailyModels, modelNames);
   } finally {
     await removeFixture(fixtureDir);
   }
@@ -419,7 +452,12 @@ test("Codex pricing preserves the effective user's settings and explicit model o
       plain.replace("gpt-5", "gpt-6.2-sol"),
     );
     const path = await withCodexPricing(
-      { source: "codex", version: "20.0.51", cwd: fixtureDir },
+      {
+        source: "codex",
+        version: "20.0.51",
+        cwd: fixtureDir,
+        modelAliases: "",
+      },
       async ({ path, supplementedModels }) => {
         assert.ok(path);
         assert.deepEqual(supplementedModels, {
@@ -465,6 +503,58 @@ test("Codex pricing preserves the effective user's settings and explicit model o
       original,
     );
     await assert.rejects(readFile(path), { code: "ENOENT" });
+  } finally {
+    await removeFixture(fixtureDir);
+  }
+});
+
+test("Codex pricing keeps the native rate of an explicitly aliased model", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    await writeRollout(
+      fixtureDir,
+      "sessions/2026/07/10/sol.jsonl",
+      plain.replace("gpt-5", "gpt-6.2-sol"),
+    );
+    await writeRollout(
+      fixtureDir,
+      ".ccusage/ccusage.json",
+      JSON.stringify({
+        defaults: {
+          pricingOverrides: {
+            "custom-sol-route": {
+              inputCostPerToken: 0.00001,
+              cacheReadInputTokenCost: 0.000001,
+              outputCostPerToken: 0.00002,
+            },
+          },
+        },
+      }),
+    );
+    for (const modelAliases of [
+      "gpt-6.2-sol=custom-sol-route",
+      '{"gpt-6.2-sol":"custom-sol-route"}',
+    ]) {
+      await withCodexPricing(
+        { source: "codex", version: "20.0.51", cwd: fixtureDir, modelAliases },
+        async ({ path, supplementedModels }) => {
+          assert.ok(path);
+          assert.deepEqual(supplementedModels.daily, ["gpt-6.2-astra"]);
+          const flags = ["--config", path, "--speed", "standard"];
+          const report = await readReport(
+            fixtureDir,
+            "daily",
+            flags,
+            false,
+            modelAliases,
+          );
+          assert.ok(
+            Math.abs(usagePeriodsFrom(report, "daily")[0].costUSD - 0.00068) <
+              1e-10,
+          );
+        },
+      );
+    }
   } finally {
     await removeFixture(fixtureDir);
   }

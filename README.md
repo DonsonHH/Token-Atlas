@@ -134,7 +134,7 @@ Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目
 
 “API 参考价”来自 ccusage 的离线定价表、日志明确记录的美元费用或 DSH 的官网价估算。它不是服务商账单、额度或 credits。当前 ccusage 版本固定为 `20.0.51`。完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
 
-ccusage `20.0.51` 的离线价表还未收录 `gpt-6.2-astra` 和 `gpt-6.2-sol`。Token Atlas 为本机 Codex 临时补入 [OpenAI 官网基础费率](https://developers.openai.com/api/docs/pricing)（2026-11-18 核对），按 ccusage 识别的 Fast 模式计 2 倍。当前参考价不含 272K 以上长上下文、Ultrafast 或超出默认时长的缓存写入附加费。数据源页和 JSON 导出会注明此口径。补价只用于该版本，不覆盖现有自定义模型价格，不修改日志和配置文件，也不回算外部导入金额。
+ccusage `20.0.51` 的离线价表还未收录 `gpt-6.2-astra` 和 `gpt-6.2-sol`。Token Atlas 为本机 Codex 临时补入 [OpenAI 官网基础费率](https://developers.openai.com/api/docs/pricing)（2026-11-18 核对），按 ccusage 识别的 Fast 模式计 2 倍。当前参考价不含超过 272K 输入的长上下文、Ultrafast 或超出默认时长的缓存写入附加费。数据源页和 JSON 导出会注明此口径。补价只用于该版本，保留当前报表生效的自定义价格和 `CCUSAGE_MODEL_ALIASES`，不修改原日志和配置。独立 ccusage 和 Jetson 导出仍使用原生价表；外部导入金额不自动回算。
 
 ### DSH 本地日志
 

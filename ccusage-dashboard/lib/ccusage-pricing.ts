@@ -49,11 +49,11 @@ export function describeCodexPricing(
         Object.entries(day.models).some(
           ([name, usage]) =>
             usage.totalTokens > 0 &&
-            !usage.missingPricing &&
-            !day.unpricedModels?.includes(name) &&
             hasPricingKey(name, model) &&
-            // Unified rows can include same-named models from other Agents.
-            (source === "codex" || sessionModels.includes(model)),
+            // A merged row can be partially priced due to another Agent.
+            (source === "all"
+              ? sessionModels.includes(model)
+              : !usage.missingPricing && !day.unpricedModels?.includes(name)),
         ),
     ),
   );
@@ -72,6 +72,32 @@ function asObject(value: unknown): Config {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Config)
     : {};
+}
+
+// ccusage accepts a JSON object or delimited from=to pairs. An injected exact
+// price would otherwise take priority over a user's explicitly routed model.
+function aliasedModelNames(value = ""): string[] {
+  const raw = value.trim();
+  if (raw.startsWith("{")) {
+    try {
+      return Object.entries(asObject(JSON.parse(raw))).flatMap(
+        ([model, target]) =>
+          typeof target === "string" && target.length ? [model] : [],
+      );
+    } catch {
+      // Native parsing also falls back to key=value pairs.
+    }
+  }
+  return raw
+    .replace(/^\{|\}$/g, "")
+    .split(/[,;\n]/)
+    .flatMap((pair) => {
+      const separator = pair.indexOf("=");
+      const model = pair.slice(0, separator).trim();
+      return separator > 0 && model && pair.slice(separator + 1).trim()
+        ? [model]
+        : [];
+    });
 }
 
 // Match config discovery in the pinned native reader. It uses the first
@@ -109,7 +135,13 @@ export async function withCodexPricing<T>(
     source,
     version,
     cwd = process.cwd(),
-  }: { source: UsageSource; version: string; cwd?: string },
+    modelAliases = process.env.CCUSAGE_MODEL_ALIASES,
+  }: {
+    source: UsageSource;
+    version: string;
+    cwd?: string;
+    modelAliases?: string;
+  },
   read: (config: ConfigSelection) => Promise<T>,
 ): Promise<T> {
   const empty = () => read({ supplementedModels: { daily: [], session: [] } });
@@ -120,6 +152,7 @@ export async function withCodexPricing<T>(
   const codex = asObject(config.codex);
   const topCommands = asObject(config.commands);
   const codexCommands = { ...asObject(codex.commands) };
+  const aliases = aliasedModelNames(modelAliases);
   const supplementedModels: SupplementedModels = { daily: [], session: [] };
   // Unified "daily --sections daily,session" uses daily settings for both sections.
   const reports: Report[] = source === "all" ? ["daily"] : ["daily", "session"];
@@ -133,9 +166,12 @@ export async function withCodexPricing<T>(
       codex.defaults,
       command,
     ];
-    const keys = options.flatMap((settings) =>
-      Object.keys(asObject(asObject(settings).pricingOverrides)),
-    );
+    const keys = [
+      ...aliases,
+      ...options.flatMap((settings) =>
+        Object.keys(asObject(asObject(settings).pricingOverrides)),
+      ),
+    ];
     const prices = Object.entries(baseRates).filter(
       ([model]) =>
         !keys.some(
