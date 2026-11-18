@@ -91,7 +91,10 @@ export function OverviewPage({
   onAnalyze: () => void;
 }) {
   const [exact, setExact] = useState(true);
-  const { totals, daily, range, codexPricing } = snapshot;
+  const { totals, daily, range } = snapshot;
+  const codexPricing = snapshot.codexPricing?.dailyModels.length
+    ? snapshot.codexPricing
+    : undefined;
   const active = daily.filter((day) => day.totalTokens > 0).length;
   const periods = calendarPeriods(daily, range, "daily");
   const peak = daily.reduce<(typeof daily)[number] | null>(

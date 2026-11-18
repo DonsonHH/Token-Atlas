@@ -46,3 +46,6 @@ next-env.d.ts
 /data/devices/*.bak
 /data/devices/*.tmp
 /data/devices/*.lock
+
+# The native reader can discover user-local settings here.
+/.ccusage/

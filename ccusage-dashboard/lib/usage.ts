@@ -14,8 +14,7 @@ import {
   combineLocalUsageReports,
 } from "./usage-snapshot";
 import { readDshUsage } from "./dsh-usage";
-import { codexPricingReference, withCodexPricing } from "./ccusage-pricing";
-import { hasPricedCodexModel } from "./usage-pricing";
+import { describeCodexPricing, withCodexPricing } from "./ccusage-pricing";
 import { usageSourceOptions, type UsageSource } from "./usage-types";
 import type { UsageRange } from "./usage-range";
 import ccusagePackage from "ccusage/package.json";
@@ -82,7 +81,7 @@ export async function readUsageSnapshot({
   const imports = readImportedUsage();
   const selection = selectUsageDevices(device, imports.devices);
   let dshDetected = false;
-  let supplementedModels: string[] = [];
+  let codexPricing: ReturnType<typeof describeCodexPricing>;
   async function readNative(configPath?: string): Promise<LocalUsageReport> {
     if (source === "all") {
       try {
@@ -126,9 +125,10 @@ export async function readUsageSnapshot({
   function readCcusage() {
     return withCodexPricing(
       { source, version: ccusagePackage.version },
-      async (config) => {
-        supplementedModels = config.supplementedModels;
-        return readNative(config.path);
+      async ({ path, supplementedModels }) => {
+        const report = await readNative(path);
+        codexPricing = describeCodexPricing(source, report, supplementedModels);
+        return report;
       },
     );
   }
@@ -155,25 +155,9 @@ export async function readUsageSnapshot({
     imports,
     local,
   });
-  const pricedModels = snapshot.activeDeviceIds.includes("local")
-    ? supplementedModels.filter(
-        (model) =>
-          snapshot.sessions.some((session) =>
-            hasPricedCodexModel(session, source, model),
-          ) ||
-          (source === "codex" &&
-            local?.daily.some(
-              ({ models }) =>
-                models[model]?.costUSD > 0 && !models[model].missingPricing,
-            )),
-      )
-    : [];
-  const codexPricing = pricedModels.length
-    ? { ...codexPricingReference, models: pricedModels }
-    : undefined;
   return {
     ...snapshot,
-    ...(codexPricing
+    ...(codexPricing && snapshot.activeDeviceIds.includes("local")
       ? { codexPricing, raw: { ...snapshot.raw, codexPricing } }
       : {}),
     reader:

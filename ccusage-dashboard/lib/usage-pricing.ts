@@ -1,6 +1,31 @@
 import { formatCost } from "./format";
 import type { UsageSession, UsageSource, UsageTotals } from "./usage-types";
 
+/** Match the pinned native reader's bounded model-key and separator lookup. */
+export function hasPricingKey(name: string, key: string): boolean {
+  const value = name.replace(/[.@]/g, "-");
+  const candidate = key.replace(/[.@]/g, "-");
+  if (!candidate) return false;
+  for (
+    let index = value.indexOf(candidate);
+    index >= 0;
+    index = value.indexOf(candidate, index + candidate.length)
+  ) {
+    const suffix = value.slice(index + candidate.length);
+    if (
+      !/[a-z0-9]/i.test(value[index - 1] ?? "") &&
+      !/^[a-z0-9]/i.test(suffix) &&
+      !(
+        /\d$/.test(candidate) &&
+        /^-\d/.test(suffix) &&
+        !/^-\d{8}(?![a-z0-9])/i.test(suffix)
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
 export function hasPricedCodexModel(
   session: UsageSession,
   source: UsageSource,
@@ -8,9 +33,11 @@ export function hasPricedCodexModel(
 ): boolean {
   return (
     (session.source ?? source) === "codex" &&
-    session.models.includes(model) &&
     session.costUSD > 0 &&
-    !session.unpricedModels?.includes(model)
+    session.models.some(
+      (name) =>
+        hasPricingKey(name, model) && !session.unpricedModels?.includes(name),
+    )
   );
 }
 

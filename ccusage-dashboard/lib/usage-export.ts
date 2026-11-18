@@ -34,19 +34,20 @@ export function usagePricingMetadata(
   sessions?: UsageSession[],
 ) {
   const scope = sessions ? { ...snapshot, sessions } : snapshot;
-  const codexPricing = scope.activeDeviceIds.includes("local")
-    ? scope.codexPricing
-    : undefined;
-  const models = codexPricing?.models.filter(
-    (model) =>
-      !sessions ||
-      sessions.some((session) =>
-        hasPricedCodexModel(session, scope.source, model),
-      ),
-  );
+  let codexPricing;
+  if (scope.codexPricing && scope.activeDeviceIds.includes("local")) {
+    const { dailyModels, sessionModels, ...reference } = scope.codexPricing;
+    const models = sessions
+      ? sessionModels.filter((model) =>
+          sessions.some((session) =>
+            hasPricedCodexModel(session, scope.source, model),
+          ),
+        )
+      : dailyModels;
+    if (models.length) codexPricing = { ...reference, models };
+  }
   return {
-    codexPricing:
-      codexPricing && models?.length ? { ...codexPricing, models } : undefined,
+    codexPricing,
     dshPricing: dshPricingMetadata(scope),
     dshAstraPricing: dshAstraPricingMetadata(scope),
   };

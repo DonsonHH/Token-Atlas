@@ -8,10 +8,7 @@ import test from "node:test";
 import { usagePeriodsFrom, usageSessionsFrom } from "../lib/usage-domain";
 import { assembleUsageSnapshot } from "../lib/usage-snapshot";
 import { resolveUsageRange } from "../lib/usage-range";
-import {
-  codexPricingReference,
-  withCodexPricing,
-} from "../lib/ccusage-pricing";
+import { describeCodexPricing, withCodexPricing } from "../lib/ccusage-pricing";
 import {
   buildUsageViewExport,
   usagePricingMetadata,
@@ -87,10 +84,11 @@ async function readReport(
       ...(unified ? ["--sections", "daily,session"] : []),
     ],
     {
-      // Isolate all Agent roots for the unified reader too. These overrides
-      // affect only the child process, never this machine's actual settings.
+      // Do not inherit adapter-specific log roots from the test runner.
+      cwd: home,
       env: {
-        ...process.env,
+        NODE_ENV: "test",
+        SystemRoot: process.env.SystemRoot,
         CODEX_HOME: home,
         HOME: home,
         USERPROFILE: home,
@@ -287,12 +285,22 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
         .replaceAll(timestamp, "2026-11-18T00:00:00Z")
         .replace("gpt-5", "gpt-6.2-astra"),
     );
+    const solTier = JSON.stringify({
+      timestamp: "2026-11-18T00:00:59Z",
+      type: "event_msg",
+      payload: {
+        type: "thread_settings_applied",
+        thread_settings: { service_tier: "priority" },
+      },
+    });
     await writeRollout(
       fixtureDir,
       "sessions/2026/11/18/sol.jsonl",
-      plain
-        .replaceAll(timestamp, "2026-11-18T00:01:00Z")
-        .replace("gpt-5", "gpt-6.2-sol"),
+      solTier +
+        "\n" +
+        plain
+          .replaceAll(timestamp, "2026-11-18T00:01:00Z")
+          .replace("gpt-5", "gpt-6.2-sol"),
     );
     const bounds = ["--since", "2026-11-18", "--until", "2026-11-18"];
     await writeRollout(fixtureDir, ".ccusage/ccusage.json", "{}");
@@ -307,12 +315,16 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
         ]);
       },
     );
-    for (const report of [focused, unified]) {
+    for (const [report, expected] of [
+      [focused, 0.00124],
+      [unified, 0.001488],
+    ] as const) {
       const [day] = usagePeriodsFrom(report, "daily");
       assert.equal(day.totalTokens, 240);
       assert.equal(day.unpricedModels, undefined);
       // Each request has 20 uncached input, 80 cache reads and 20 output tokens.
-      assert.ok(Math.abs(day.costUSD - 0.00124) < 1e-10);
+      // Unified auto mode charges Sol at the observed Fast rate.
+      assert.ok(Math.abs(day.costUSD - expected) < 1e-10);
     }
     const sessions = usageSessionsFrom(unified).sort(
       (a, b) => b.costUSD - a.costUSD,
@@ -322,27 +334,37 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
       [["gpt-6.2-astra"], ["gpt-6.2-sol"]],
     );
     assert.ok(Math.abs(sessions[0].costUSD - 0.000992) < 1e-10);
-    assert.ok(Math.abs(sessions[1].costUSD - 0.000248) < 1e-10);
+    assert.ok(Math.abs(sessions[1].costUSD - 0.000496) < 1e-10);
     assert.ok(
       Math.abs(usagePeriodsFrom(fast, "daily")[0].costUSD - 0.00248) < 1e-10,
     );
 
+    const modelNames = ["gpt-6.2-astra", "gpt-6.2-sol"];
+    const supplemented = { daily: modelNames, session: modelNames };
+    const focusedWithoutSessions = {
+      daily: usagePeriodsFrom(focused, "daily"),
+      sessions: [],
+    };
+    assert.deepEqual(
+      describeCodexPricing("codex", focusedWithoutSessions, supplemented)
+        ?.dailyModels,
+      modelNames,
+    );
+    const local = { daily: usagePeriodsFrom(unified, "daily"), sessions };
     const snapshot = {
       ...assembleUsageSnapshot({
         range: resolveUsageRange({ start: "2026-11-18", end: "2026-11-18" }),
         device: "local",
         source: "all",
-        local: { daily: usagePeriodsFrom(unified, "daily"), sessions },
+        local,
         imports: { devices: [], dailyByDevice: {}, warnings: [] },
       }),
-      codexPricing: {
-        ...codexPricingReference,
-        models: ["gpt-6.2-astra", "gpt-6.2-sol"],
-      },
+      codexPricing: describeCodexPricing("all", local, supplemented),
     };
     const exported = buildUsageViewExport(snapshot, "all");
     assert.equal(snapshot.warnings.length, 0);
-    assert.deepEqual(exported.codexPricing, snapshot.codexPricing);
+    assert.deepEqual(exported.codexPricing?.models, modelNames);
+    assert.equal(exported.codexPricing?.basis, snapshot.codexPricing?.basis);
     assert.equal(
       validateUsageImport(exported, "Fixture", "codex").daily[0].costUSD,
       snapshot.totals.costUSD,
@@ -372,7 +394,16 @@ test("Codex pricing preserves the effective user's settings and explicit model o
       },
       commands: {
         "codex daily": {
-          pricingOverrides: { "gpt-6.2-sol": { fastMultiplier: 1.5 } },
+          pricingOverrides: {
+            "gpt-6-2-sol": {
+              inputCostPerToken: 0.00001,
+              cacheReadInputTokenCost: 0.000001,
+              outputCostPerToken: 0.00002,
+            },
+          },
+        },
+        monthly: {
+          pricingOverrides: { "gpt-6.2-astra": { fastMultiplier: 1.5 } },
         },
       },
       codex: { defaults: { speed: "fast" } },
@@ -382,24 +413,48 @@ test("Codex pricing preserves the effective user's settings and explicit model o
       ".ccusage/ccusage.json",
       JSON.stringify(original),
     );
+    await writeRollout(
+      fixtureDir,
+      "sessions/2026/07/10/sol.jsonl",
+      plain.replace("gpt-5", "gpt-6.2-sol"),
+    );
     const path = await withCodexPricing(
       { source: "codex", version: "20.0.51", cwd: fixtureDir },
       async ({ path, supplementedModels }) => {
         assert.ok(path);
-        assert.deepEqual(supplementedModels, ["gpt-6.2-astra"]);
+        assert.deepEqual(supplementedModels, {
+          daily: ["gpt-6.2-astra"],
+          session: ["gpt-6.2-astra", "gpt-6.2-sol"],
+        });
         const config = JSON.parse(await readFile(path, "utf8"));
         assert.deepEqual(config.defaults, original.defaults);
         assert.deepEqual(config.commands, original.commands);
         assert.equal(config.codex.defaults.speed, "fast");
         assert.equal(
-          config.codex.defaults.pricingOverrides["gpt-6.2-sol"],
+          config.codex.commands.daily.pricingOverrides["gpt-6.2-sol"],
           undefined,
         );
         assert.equal(
-          config.codex.defaults.pricingOverrides["gpt-6.2-astra"]
+          config.codex.commands.daily.pricingOverrides["gpt-6.2-astra"]
             .cacheReadInputTokenCost,
           0.0000004,
         );
+        const flags = ["--config", path, "--speed", "standard"];
+        const [dailyResult, sessionResult] = await Promise.all([
+          readReport(fixtureDir, "daily", flags),
+          readReport(fixtureDir, "session", flags),
+        ]);
+        const daily = usagePeriodsFrom(dailyResult, "daily");
+        const sessions = usageSessionsFrom(sessionResult);
+        assert.ok(Math.abs(daily[0].costUSD - 0.00068) < 1e-10);
+        assert.ok(Math.abs(sessions[0].costUSD - 0.000248) < 1e-10);
+        const basis = describeCodexPricing(
+          "codex",
+          { daily, sessions },
+          supplementedModels,
+        );
+        assert.deepEqual(basis?.dailyModels, []);
+        assert.deepEqual(basis?.sessionModels, ["gpt-6.2-sol"]);
         return path;
       },
     );

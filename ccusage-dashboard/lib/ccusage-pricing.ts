@@ -1,7 +1,8 @@
 import { mkdtemp, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { UsageSource } from "./usage-types";
+import { hasPricedCodexModel, hasPricingKey } from "./usage-pricing";
+import type { LocalUsageReport, UsageSource } from "./usage-types";
 
 // This release cannot configure a per-model context threshold or Ultrafast.
 // The overrides supply the official base USD rates without the wrong 200K tier.
@@ -30,8 +31,42 @@ export const codexPricingReference = {
     "本机 Codex 的 GPT-6.2 按官方基础费率估算，Fast 按 2 倍计。不含超过 272K 输入的长上下文、Ultrafast 或延长缓存时长的附加费。",
 } as const;
 
+type Report = "daily" | "session";
+type SupplementedModels = Record<Report, string[]>;
+
+export function describeCodexPricing(
+  source: UsageSource,
+  { daily, sessions }: Pick<LocalUsageReport, "daily" | "sessions">,
+  supplementedModels: SupplementedModels,
+) {
+  const sessionModels = supplementedModels.session.filter((model) =>
+    sessions.some((session) => hasPricedCodexModel(session, source, model)),
+  );
+  const dailyModels = supplementedModels.daily.filter((model) =>
+    daily.some(
+      (day) =>
+        day.costUSD > 0 &&
+        Object.entries(day.models).some(
+          ([name, usage]) =>
+            usage.totalTokens > 0 &&
+            !usage.missingPricing &&
+            !day.unpricedModels?.includes(name) &&
+            hasPricingKey(name, model) &&
+            // Unified rows can include same-named models from other Agents.
+            (source === "codex" || sessionModels.includes(model)),
+        ),
+    ),
+  );
+  return dailyModels.length || sessionModels.length
+    ? { ...codexPricingReference, dailyModels, sessionModels }
+    : undefined;
+}
+
 type Config = Record<string, unknown>;
-type ConfigSelection = { path?: string; supplementedModels: string[] };
+type ConfigSelection = {
+  path?: string;
+  supplementedModels: SupplementedModels;
+};
 
 function asObject(value: unknown): Config {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -56,8 +91,9 @@ async function readEffectiveConfig(cwd: string): Promise<Config> {
         : [];
   for (const directory of [join(cwd, ".ccusage"), ...userDirs]) {
     try {
+      const path = join(directory, "ccusage.json");
       const value: unknown = JSON.parse(
-        await readFile(join(directory, "ccusage.json"), "utf8"),
+        await readFile(/* turbopackIgnore: true */ path, "utf8"),
       );
       if (value && typeof value === "object" && !Array.isArray(value))
         return value as Config;
@@ -76,29 +112,49 @@ export async function withCodexPricing<T>(
   }: { source: UsageSource; version: string; cwd?: string },
   read: (config: ConfigSelection) => Promise<T>,
 ): Promise<T> {
+  const empty = () => read({ supplementedModels: { daily: [], session: [] } });
   if (version !== "20.0.51" || (source !== "codex" && source !== "all"))
-    return read({ supplementedModels: [] });
+    return empty();
 
   const config = await readEffectiveConfig(cwd);
   const codex = asObject(config.codex);
-  const defaults = asObject(codex.defaults);
-  const topCommands = Object.entries(asObject(config.commands)).filter(
-    ([key]) => !/[ :]/.test(key) || /^codex[ :]/.test(key),
-  );
-  const options = [
-    config.defaults,
-    defaults,
-    ...topCommands.map(([, value]) => value),
-    ...Object.values(asObject(codex.commands)),
-  ];
-  // Preserve explicit model overrides even if scoped to a single report.
-  const prices = Object.entries(baseRates).filter(([model]) =>
-    options.every(
-      (value) =>
-        !Object.hasOwn(asObject(asObject(value).pricingOverrides), model),
-    ),
-  );
-  if (!prices.length) return read({ supplementedModels: [] });
+  const topCommands = asObject(config.commands);
+  const codexCommands = { ...asObject(codex.commands) };
+  const supplementedModels: SupplementedModels = { daily: [], session: [] };
+  // Unified "daily --sections daily,session" uses daily settings for both sections.
+  const reports: Report[] = source === "all" ? ["daily"] : ["daily", "session"];
+  for (const report of reports) {
+    const command = asObject(codexCommands[report]);
+    const options = [
+      config.defaults,
+      topCommands[report],
+      topCommands[`codex ${report}`],
+      topCommands[`codex:${report}`],
+      codex.defaults,
+      command,
+    ];
+    const keys = options.flatMap((settings) =>
+      Object.keys(asObject(asObject(settings).pricingOverrides)),
+    );
+    const prices = Object.entries(baseRates).filter(
+      ([model]) =>
+        !keys.some(
+          (key) => hasPricingKey(model, key) || hasPricingKey(key, model),
+        ),
+    );
+    if (!prices.length) continue;
+    codexCommands[report] = {
+      ...command,
+      pricingOverrides: {
+        ...asObject(command.pricingOverrides),
+        ...Object.fromEntries(prices),
+      },
+    };
+    supplementedModels[report] = prices.map(([model]) => model);
+  }
+  if (source === "all") supplementedModels.session = supplementedModels.daily;
+  if (!supplementedModels.daily.length && !supplementedModels.session.length)
+    return empty();
 
   let directory: string | undefined;
   let path: string | undefined;
@@ -113,29 +169,17 @@ export async function withCodexPricing<T>(
       path,
       JSON.stringify({
         ...config,
-        codex: {
-          ...codex,
-          defaults: {
-            ...defaults,
-            pricingOverrides: {
-              ...asObject(defaults.pricingOverrides),
-              ...Object.fromEntries(prices),
-            },
-          },
-        },
+        codex: { ...codex, commands: codexCommands },
       }),
       { encoding: "utf8", flag: "wx", mode: 0o600 },
     );
   } catch {
     // A temporary-file failure must not prevent the unmodified reader from running.
     await cleanup();
-    return read({ supplementedModels: [] });
+    return empty();
   }
   try {
-    return await read({
-      path,
-      supplementedModels: prices.map(([model]) => model),
-    });
+    return await read({ path, supplementedModels });
   } finally {
     await cleanup();
   }
