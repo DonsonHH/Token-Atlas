@@ -1,10 +1,12 @@
 import type {
   UsageDeviceFilter,
+  UsageSession,
   UsageSnapshot,
   UsageSource,
 } from "./usage-types";
 import { dshPricingMetadata } from "./deepseek-pricing";
 import { dshAstraPricingMetadata } from "./astra-pricing";
+import { hasPricedCodexModel } from "./usage-pricing";
 
 export type UsageViewExport = Pick<
   UsageSnapshot,
@@ -25,9 +27,26 @@ export type UsageViewExport = Pick<
 } & Partial<ReturnType<typeof usagePricingMetadata>>;
 
 export function usagePricingMetadata(
-  scope: Pick<UsageSnapshot, "reader" | "activeDeviceIds" | "sessions">,
+  snapshot: Pick<
+    UsageSnapshot,
+    "reader" | "activeDeviceIds" | "sessions" | "source" | "codexPricing"
+  >,
+  sessions?: UsageSession[],
 ) {
+  const scope = sessions ? { ...snapshot, sessions } : snapshot;
+  const codexPricing = scope.activeDeviceIds.includes("local")
+    ? scope.codexPricing
+    : undefined;
+  const models = codexPricing?.models.filter(
+    (model) =>
+      !sessions ||
+      sessions.some((session) =>
+        hasPricedCodexModel(session, scope.source, model),
+      ),
+  );
   return {
+    codexPricing:
+      codexPricing && models?.length ? { ...codexPricing, models } : undefined,
     dshPricing: dshPricingMetadata(scope),
     dshAstraPricing: dshAstraPricingMetadata(scope),
   };

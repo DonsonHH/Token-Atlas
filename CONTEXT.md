@@ -24,6 +24,10 @@ Product copy is Chinese and deliberately brief.
   legacy rows with zero cost remain unconfirmed, not "free". Incomplete cost
   periods are gaps in charts; totals show only a clearly labelled known subtotal.
 - The pinned ccusage reader and Jetson export script must be upgraded together.
+- ccusage 20.0.51 lacks GPT-6.2 Astra and Sol in its offline catalog. Supplement
+  only local Codex reports with the published base USD rates and Fast multiplier.
+  Preserve explicit user overrides and disclose excluded surcharges with local
+  pricing metadata. Recheck native coverage before removing the supplement.
 - Codex history includes plain and Zstandard-compressed rollouts in both
   sessions/ and archived_sessions/. Test the installed CLI with isolated
   synthetic logs, including duplicate representations, before reader upgrades.

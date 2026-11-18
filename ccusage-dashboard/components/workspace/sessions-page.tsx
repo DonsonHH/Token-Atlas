@@ -112,11 +112,7 @@ export function SessionsPage({
       downloadJsonFile(`token-atlas-sessions-${snapshot.range.end}.json`, {
         range: snapshot.range,
         source: snapshot.source,
-        ...usagePricingMetadata({
-          reader: snapshot.reader,
-          activeDeviceIds: snapshot.activeDeviceIds,
-          sessions: rows,
-        }),
+        ...usagePricingMetadata(snapshot, rows),
         model,
         search: query,
         sessions: rows,

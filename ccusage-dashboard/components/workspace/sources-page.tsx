@@ -32,8 +32,11 @@ export function SourcesPage({
 }) {
   const [importTarget, setImportTarget] = useState<string | null>(null);
   const [audit, setAudit] = useState(false);
-  const { dshPricing: pricing, dshAstraPricing: astraPricing } =
-    usagePricingMetadata(snapshot);
+  const {
+    codexPricing,
+    dshPricing: pricing,
+    dshAstraPricing: astraPricing,
+  } = usagePricingMetadata(snapshot);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -188,6 +191,20 @@ export function SourcesPage({
             </p>
           </div>
         </div>
+        {codexPricing ? (
+          <p className="mt-4 border-t pt-4 text-xs text-muted-foreground">
+            Codex：
+            <a
+              className="underline underline-offset-4"
+              href={codexPricing.source}
+              target="_blank"
+              rel="noreferrer"
+            >
+              OpenAI 官网美元价
+            </a>{" "}
+            · 核对日期 {codexPricing.checkedAt} · {codexPricing.basis}
+          </p>
+        ) : null}
         {pricing ? (
           <p className="mt-4 border-t pt-4 text-xs text-muted-foreground">
             DSH：

@@ -91,7 +91,7 @@ export function OverviewPage({
   onAnalyze: () => void;
 }) {
   const [exact, setExact] = useState(true);
-  const { totals, daily, range } = snapshot;
+  const { totals, daily, range, codexPricing } = snapshot;
   const active = daily.filter((day) => day.totalTokens > 0).length;
   const periods = calendarPeriods(daily, range, "daily");
   const peak = daily.reduce<(typeof daily)[number] | null>(
@@ -144,12 +144,16 @@ export function OverviewPage({
           icon={CircleDollarSign}
           detail={
             pricingState(totals) === "complete"
-              ? "本地估算 · 非实际账单"
+              ? codexPricing
+                ? "含 GPT-6.2 基础费率估算"
+                : "本地估算 · 非实际账单"
               : pricingState(totals) === "partial"
-                ? "已定价部分 · 存在价格缺失"
+                ? codexPricing
+                  ? "已定价小计 · 含 GPT-6.2 估算"
+                  : "已定价部分 · 存在价格缺失"
                 : "缺少可确认的模型价格"
           }
-          hint="参考价来自 ccusage、日志记录费用或 DSH 的官网价估算。DSH 中的 DeepSeek 按北京时间峰谷，Astra 按 OpenAI Standard 和默认缓存写入价；均不等于网关账单。"
+          hint={`参考价来自 ccusage、日志记录费用或 DSH 的官网价估算，不等于实际账单。${codexPricing?.basis ?? ""}`}
         />
       </section>
       <DashboardPanel

@@ -1,5 +1,18 @@
 import { formatCost } from "./format";
-import type { UsageTotals } from "./usage-types";
+import type { UsageSession, UsageSource, UsageTotals } from "./usage-types";
+
+export function hasPricedCodexModel(
+  session: UsageSession,
+  source: UsageSource,
+  model: string,
+): boolean {
+  return (
+    (session.source ?? source) === "codex" &&
+    session.models.includes(model) &&
+    session.costUSD > 0 &&
+    !session.unpricedModels?.includes(model)
+  );
+}
 
 /** Costs are known subtotals when any contributing entry has no price. */
 export function pricingState(

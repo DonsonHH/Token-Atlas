@@ -1,4 +1,5 @@
 import type { UsageRange } from "./usage-range";
+import type { codexPricingReference } from "./ccusage-pricing";
 
 export const usageSourceOptions = [
   { command: null, label: "全部已识别来源", value: "all" },
@@ -111,6 +112,7 @@ export type UsageSnapshot = {
   reader: "ccusage" | "ccusage+dsh" | "dsh";
   readerVersion?: string;
   sessions: UsageSession[];
+  codexPricing?: typeof codexPricingReference & { models: string[] };
   source: UsageSource;
   totals: UsageTotals;
   weekly: UsagePeriod[];

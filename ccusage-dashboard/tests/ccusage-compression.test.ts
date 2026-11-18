@@ -8,6 +8,16 @@ import test from "node:test";
 import { usagePeriodsFrom, usageSessionsFrom } from "../lib/usage-domain";
 import { assembleUsageSnapshot } from "../lib/usage-snapshot";
 import { resolveUsageRange } from "../lib/usage-range";
+import {
+  codexPricingReference,
+  withCodexPricing,
+} from "../lib/ccusage-pricing";
+import {
+  buildUsageViewExport,
+  usagePricingMetadata,
+} from "../lib/usage-export";
+import { validateUsageImport } from "../lib/usage-import-validation";
+import ccusagePackage from "ccusage/package.json";
 
 const exec = promisify(execFile);
 const cli = resolve("node_modules/ccusage/src/cli.js");
@@ -265,4 +275,142 @@ test("Jetson export and the installed reader use the same pinned version", async
   );
   assert.equal(installed.version, project.dependencies.ccusage);
   assert.ok(script.includes(`ccusage_version="${installed.version}"`));
+});
+
+test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified reports", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    await writeRollout(
+      fixtureDir,
+      "sessions/2026/11/18/astra.jsonl",
+      plain
+        .replaceAll(timestamp, "2026-11-18T00:00:00Z")
+        .replace("gpt-5", "gpt-6.2-astra"),
+    );
+    await writeRollout(
+      fixtureDir,
+      "sessions/2026/11/18/sol.jsonl",
+      plain
+        .replaceAll(timestamp, "2026-11-18T00:01:00Z")
+        .replace("gpt-5", "gpt-6.2-sol"),
+    );
+    const bounds = ["--since", "2026-11-18", "--until", "2026-11-18"];
+    await writeRollout(fixtureDir, ".ccusage/ccusage.json", "{}");
+    const [focused, unified, fast] = await withCodexPricing(
+      { source: "all", version: ccusagePackage.version, cwd: fixtureDir },
+      ({ path }) => {
+        const flags = path ? [...bounds, "--config", path] : bounds;
+        return Promise.all([
+          readReport(fixtureDir, "daily", [...flags, "--speed", "standard"]),
+          readReport(fixtureDir, "daily", flags, true),
+          readReport(fixtureDir, "daily", [...flags, "--speed", "fast"]),
+        ]);
+      },
+    );
+    for (const report of [focused, unified]) {
+      const [day] = usagePeriodsFrom(report, "daily");
+      assert.equal(day.totalTokens, 240);
+      assert.equal(day.unpricedModels, undefined);
+      // Each request has 20 uncached input, 80 cache reads and 20 output tokens.
+      assert.ok(Math.abs(day.costUSD - 0.00124) < 1e-10);
+    }
+    const sessions = usageSessionsFrom(unified).sort(
+      (a, b) => b.costUSD - a.costUSD,
+    );
+    assert.deepEqual(
+      sessions.map((session) => session.models),
+      [["gpt-6.2-astra"], ["gpt-6.2-sol"]],
+    );
+    assert.ok(Math.abs(sessions[0].costUSD - 0.000992) < 1e-10);
+    assert.ok(Math.abs(sessions[1].costUSD - 0.000248) < 1e-10);
+    assert.ok(
+      Math.abs(usagePeriodsFrom(fast, "daily")[0].costUSD - 0.00248) < 1e-10,
+    );
+
+    const snapshot = {
+      ...assembleUsageSnapshot({
+        range: resolveUsageRange({ start: "2026-11-18", end: "2026-11-18" }),
+        device: "local",
+        source: "all",
+        local: { daily: usagePeriodsFrom(unified, "daily"), sessions },
+        imports: { devices: [], dailyByDevice: {}, warnings: [] },
+      }),
+      codexPricing: {
+        ...codexPricingReference,
+        models: ["gpt-6.2-astra", "gpt-6.2-sol"],
+      },
+    };
+    const exported = buildUsageViewExport(snapshot, "all");
+    assert.equal(snapshot.warnings.length, 0);
+    assert.deepEqual(exported.codexPricing, snapshot.codexPricing);
+    assert.equal(
+      validateUsageImport(exported, "Fixture", "codex").daily[0].costUSD,
+      snapshot.totals.costUSD,
+    );
+    assert.deepEqual(
+      usagePricingMetadata(snapshot, [sessions[1]]).codexPricing?.models,
+      ["gpt-6.2-sol"],
+    );
+    assert.equal(usagePricingMetadata(snapshot, []).codexPricing, undefined);
+    assert.equal(
+      usagePricingMetadata({ ...snapshot, activeDeviceIds: ["external"] })
+        .codexPricing,
+      undefined,
+    );
+  } finally {
+    await removeFixture(fixtureDir);
+  }
+});
+
+test("Codex pricing preserves the effective user's settings and explicit model overrides", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    const original = {
+      defaults: {
+        timezone: "UTC",
+        pricingOverrides: { "gpt-5": { inputCostPerToken: 0.0001 } },
+      },
+      commands: {
+        "codex daily": {
+          pricingOverrides: { "gpt-6.2-sol": { fastMultiplier: 1.5 } },
+        },
+      },
+      codex: { defaults: { speed: "fast" } },
+    };
+    await writeRollout(
+      fixtureDir,
+      ".ccusage/ccusage.json",
+      JSON.stringify(original),
+    );
+    const path = await withCodexPricing(
+      { source: "codex", version: "20.0.51", cwd: fixtureDir },
+      async ({ path, supplementedModels }) => {
+        assert.ok(path);
+        assert.deepEqual(supplementedModels, ["gpt-6.2-astra"]);
+        const config = JSON.parse(await readFile(path, "utf8"));
+        assert.deepEqual(config.defaults, original.defaults);
+        assert.deepEqual(config.commands, original.commands);
+        assert.equal(config.codex.defaults.speed, "fast");
+        assert.equal(
+          config.codex.defaults.pricingOverrides["gpt-6.2-sol"],
+          undefined,
+        );
+        assert.equal(
+          config.codex.defaults.pricingOverrides["gpt-6.2-astra"]
+            .cacheReadInputTokenCost,
+          0.0000004,
+        );
+        return path;
+      },
+    );
+    assert.deepEqual(
+      JSON.parse(
+        await readFile(join(fixtureDir, ".ccusage", "ccusage.json"), "utf8"),
+      ),
+      original,
+    );
+    await assert.rejects(readFile(path), { code: "ENOENT" });
+  } finally {
+    await removeFixture(fixtureDir);
+  }
 });
