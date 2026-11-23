@@ -11,6 +11,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch, SwitchThumb } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -30,7 +31,13 @@ const agentLabel = { codex: "Codex", dsh: "DSH" };
 const numeric = "text-right tabular-nums";
 type PerformanceDetail = "models" | "samples";
 
-function TimingMethod({ partial }: { partial: boolean }) {
+function TimingMethod({
+  partial,
+  sampleCounts,
+}: {
+  partial: boolean;
+  sampleCounts?: { checked: boolean; onChange: (checked: boolean) => void };
+}) {
   return (
     <Popover>
       <PopoverTrigger
@@ -53,12 +60,27 @@ function TimingMethod({ partial }: { partial: boolean }) {
             当前只覆盖部分记录。缩小日期范围可查看更有针对性的样本。
           </p>
         ) : null}
+        {sampleCounts ? (
+          <div className="flex items-center justify-between gap-3 border-t pt-3 text-xs">
+            <span>显示样本数</span>
+            <Switch
+              aria-label="显示样本数"
+              checked={sampleCounts.checked}
+              onCheckedChange={sampleCounts.onChange}
+            >
+              <SwitchThumb className="motion-reduce:transition-none" />
+            </Switch>
+          </div>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
 }
 
-function ModelTimingTable({ models }: Pick<PerformanceReport, "models">) {
+function ModelTimingTable({
+  models,
+  showSamples,
+}: Pick<PerformanceReport, "models"> & { showSamples: boolean }) {
   return (
     <Table aria-label="按模型统计请求性能">
       <TableHeader className="bg-muted/40">
@@ -89,10 +111,18 @@ function ModelTimingTable({ models }: Pick<PerformanceReport, "models">) {
               {formatExactTokens(requests)}
             </TableCell>
             <TableCell className={numeric}>
-              <TimingValue metric={speed} unit="tok/s" />
+              <TimingValue
+                metric={speed}
+                unit="tok/s"
+                showSamples={showSamples}
+              />
             </TableCell>
             <TableCell className={cn("pr-3", numeric)}>
-              <TimingValue metric={firstToken} unit="s" />
+              <TimingValue
+                metric={firstToken}
+                unit="s"
+                showSamples={showSamples}
+              />
             </TableCell>
           </TableRow>
         ))}
@@ -175,6 +205,7 @@ export function PerformancePanel({
   timezone: string;
 }) {
   const [detail, setDetail] = useState<PerformanceDetail>("models");
+  const [showSamples, setShowSamples] = useState(false);
   const { report, reading, unavailable, error } = state;
   const partial =
     report?.coverage.some(
@@ -208,7 +239,14 @@ export function PerformancePanel({
               ]}
             />
           ) : null}
-          <TimingMethod partial={partial} />
+          <TimingMethod
+            partial={partial}
+            sampleCounts={
+              hasModels && detail === "models"
+                ? { checked: showSamples, onChange: setShowSamples }
+                : undefined
+            }
+          />
         </div>
       }
     >
@@ -223,7 +261,10 @@ export function PerformancePanel({
         ) : (
           <div className="rounded-lg border">
             {detail === "models" ? (
-              <ModelTimingTable models={report.models} />
+              <ModelTimingTable
+                models={report.models}
+                showSamples={showSamples}
+              />
             ) : (
               <SampleTimingTable recent={report.recent} timezone={timezone} />
             )}
