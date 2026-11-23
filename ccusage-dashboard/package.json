@@ -3,9 +3,9 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/run-local.mjs dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/run-local.mjs start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js",

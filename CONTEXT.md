@@ -6,8 +6,9 @@ Product copy is Chinese and deliberately brief.
 
 ## Current redesign
 
-- Four tasks: overview (scale), analysis (time/model drilldown), sessions
-  (local records), sources (device coverage and JSON import).
+- Four tasks: overview (scale and models), analysis (trend or request
+  performance), sessions (local aggregates), sources
+  (device coverage and JSON import).
 - The URL owns navigation and the applied device/source/date scope.
 - One inclusive date range feeds daily, weekly, monthly, session and export
   reports. Weeks/months are derived from the filtered daily data.
@@ -37,25 +38,41 @@ Product copy is Chinese and deliberately brief.
   highest supported session generation counts, after the last explicitly tagged
   inherited cut. Untagged restore boundaries must never erase owned usage.
 - DSH preserves explicitly recorded costUSD; otherwise supported models use
-  checked official USD rates per request, before aggregation. DeepSeek uses
-  Beijing peak periods and verified holidays; Astra estimates use OpenAI
+  checked official USD rates per request, before aggregation. Require
+  reconciled input/output/cache counters for each estimate. DeepSeek uses
+  Beijing peak periods and verified holidays. Astra estimates use OpenAI
   Standard and default 30-minute cache writes, with the long-context threshold
-  applied to uncached input plus cache reads and writes. Unknown rates stay
-  unpriced. No implicit FX conversion.
+  applied to all input. Opus 5.5 uses Anthropic global Standard and default
+  5-minute writes, verified against ccusage's native Claude Code report with
+  identical token buckets. Unknown rates stay unpriced. No implicit FX conversion.
 - Normalize `deepseek-v4.1-flash` to `deepseek-flash` in report models, session
   names and pricing diagnostics. This only groups existing usage, without
   repricing imports or merging older V4 Flash generations. Match report-wide
   price hints to raw names before grouping; row-level diagnostics take precedence.
   Session search accepts either name.
 - Official API-equivalent estimates are not gateway bills. Keep the source,
-  check date and current-rate-card basis visible. Show the Astra card only when
-  a complete, consistent request in scope actually used it; never read DSH credentials.
+  check date and current-rate-card basis visible. Show only cards actually used
+  by counted requests in scope; never read DSH credentials.
+- Request timing is a read-only projection of native Codex and DSH logs.
+  It never requires CC Switch software, database, or proxy. Do not add
+  timing evidence as usage or costs. Keep turn-level TTFT separate from
+  request-level estimates. Leave unproven values empty, show sample counts,
+  and disclose partial coverage without a technical status strip. Poll the
+  timing endpoint only while the Request Performance analysis tab is active
+  and visible. Keep it private to the loopback launcher.
+- Desktop launch runs one production server; development watchers are opt-in.
+  Start timing after the main summary, coalesce refreshes, throttle to the
+  visible 60-second cadence and bound decoded bytes, lines, samples, metadata
+  discovery and retained files. Date-range timing must not warm unrelated
+  archived logs. Resource-limited timing is partial coverage, never a missing
+  usage charge or a confirmed zero.
 
 ## Modules
 
 `ccusage-dashboard/lib/usage-range.ts` owns date validation.
 `lib/usage.ts` reads ccusage; `lib/usage-snapshot.ts` assembles reports.
 `lib/usage-analytics.ts` prepares chart data without rendering concerns.
+`lib/native-performance.ts` owns the request timing report seam.
 `components/workspace/` owns the shell, scope controls and page tasks.
 
 ## Verification

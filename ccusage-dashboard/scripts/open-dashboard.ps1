@@ -20,7 +20,8 @@ if (-not (Test-TokenAtlasReady)) {
 
   Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$startScript`"" -WindowStyle Hidden
 
-  $deadline = (Get-Date).AddSeconds(35)
+  # First launch or an edited checkout may need a production build.
+  $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Date) -lt $deadline) {
     if (Test-TokenAtlasReady) {
       break
@@ -31,7 +32,7 @@ if (-not (Test-TokenAtlasReady)) {
 }
 
 if (-not (Test-TokenAtlasReady)) {
-  throw "Token Atlas did not start within 35 seconds. Check the script and dependencies."
+  throw "Token Atlas did not start within 120 seconds. Check the production build and dependencies."
 }
 
 Start-Process $url

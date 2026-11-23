@@ -2,8 +2,10 @@ import { usageSourceOptions, type UsageSource } from "./usage-types";
 import type { Grain, Metric } from "./usage-analytics";
 
 export type WorkspacePage = "overview" | "analysis" | "sessions" | "sources";
+export type AnalysisSection = "trend" | "performance";
 export type WorkspaceState = {
   page: WorkspacePage;
+  analysisSection: AnalysisSection;
   device: string;
   source: UsageSource;
   days: string;
@@ -20,9 +22,16 @@ export function workspaceState(query: URLSearchParams): WorkspaceState {
   const grain = query.get("grain");
   return {
     page:
-      page === "analysis" || page === "sessions" || page === "sources"
-        ? page
-        : "overview",
+      page === "requests"
+        ? "analysis"
+        : page === "analysis" || page === "sessions" || page === "sources"
+          ? page
+          : "overview",
+    analysisSection:
+      page === "requests" ||
+      (page === "analysis" && query.get("section") === "performance")
+        ? "performance"
+        : "trend",
     source:
       usageSourceOptions.find((item) => item.value === query.get("source"))
         ?.value ?? "all",
@@ -46,10 +55,17 @@ export function workspaceQuery(state: WorkspaceState): string {
     source: state.source,
     days: state.days,
   });
+  if (isPerformanceView(state)) query.set("section", "performance");
   if (state.start) query.set("start", state.start);
   if (state.end) query.set("end", state.end);
   if (state.metric !== "tokens") query.set("metric", state.metric);
   if (state.grain !== "daily") query.set("grain", state.grain);
   if (state.split) query.set("split", "models");
   return query.toString();
+}
+
+export function isPerformanceView(
+  state: Pick<WorkspaceState, "page" | "analysisSection">,
+): boolean {
+  return state.page === "analysis" && state.analysisSection === "performance";
 }

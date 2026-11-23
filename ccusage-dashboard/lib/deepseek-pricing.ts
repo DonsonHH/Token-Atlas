@@ -1,4 +1,4 @@
-import type { UsageTotals, UsageSnapshot } from "./usage-types";
+import type { UsageTotals } from "./usage-types";
 import { canonicalModelName } from "./model-names";
 
 /** A checked rate-card snapshot, not a reconstruction of historical invoices. */
@@ -11,7 +11,7 @@ export const deepseekPricingReference = {
   timezone: "Asia/Shanghai",
   calendarYears: [2026, 2027],
   basis:
-    "日志明确记录的 costUSD 优先；其余按当前官网美元价格和请求时间估算 token 参考价。非历史账单，不含 Search/Fetch 独立请求费用。",
+    "按当前官网美元价与请求时间的北京时间峰谷估算；非实际账单，不含 Search/Fetch 独立费用。",
 } as const;
 
 // Published holiday breaks. Weekend make-up workdays remain off-peak under
@@ -83,8 +83,9 @@ export function deepseekReferenceCostUSD(
       .toLowerCase()
       .replace(/^deepseek\//, ""),
   );
+  if (!family || usage.cacheCreationTokens !== 0) return null;
   const period = deepseekPricePeriod(at);
-  if (!family || !period || usage.cacheCreationTokens !== 0) return null;
+  if (!period) return null;
   if (
     ![usage.inputTokens, usage.cacheReadTokens, usage.outputTokens].every(
       (value) => Number.isSafeInteger(value) && value >= 0,
@@ -103,13 +104,4 @@ export function deepseekReferenceCostUSD(
       usage.outputTokens * rates.output) *
     (period === "peak" ? 2 : 1);
   return Number.isSafeInteger(nanoUSD) ? nanoUSD / 1_000_000_000 : null;
-}
-
-export function dshPricingMetadata(
-  snapshot: Pick<UsageSnapshot, "reader" | "activeDeviceIds">,
-) {
-  return snapshot.activeDeviceIds.includes("local") &&
-    (snapshot.reader === "dsh" || snapshot.reader === "ccusage+dsh")
-    ? deepseekPricingReference
-    : undefined;
 }

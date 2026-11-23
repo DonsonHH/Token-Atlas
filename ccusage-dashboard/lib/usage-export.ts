@@ -4,8 +4,7 @@ import type {
   UsageSnapshot,
   UsageSource,
 } from "./usage-types";
-import { dshPricingMetadata } from "./deepseek-pricing";
-import { dshAstraPricingMetadata } from "./astra-pricing";
+import { dshPricingMetadata } from "./dsh-pricing";
 import { hasPricedCodexModel } from "./usage-pricing";
 
 export type UsageViewExport = Pick<
@@ -29,7 +28,7 @@ export type UsageViewExport = Pick<
 export function usagePricingMetadata(
   snapshot: Pick<
     UsageSnapshot,
-    "reader" | "activeDeviceIds" | "sessions" | "source" | "codexPricing"
+    "activeDeviceIds" | "sessions" | "source" | "codexPricing"
   >,
   sessions?: UsageSession[],
 ) {
@@ -48,8 +47,7 @@ export function usagePricingMetadata(
   }
   return {
     codexPricing,
-    dshPricing: dshPricingMetadata(scope),
-    dshAstraPricing: dshAstraPricingMetadata(scope),
+    ...dshPricingMetadata(scope),
   };
 }
 

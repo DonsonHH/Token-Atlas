@@ -5,6 +5,7 @@ import { CalendarDays, Download, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardPanel } from "@/components/dashboard-panel";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -29,8 +30,57 @@ import { pricingState, referenceCostLabel } from "@/lib/usage-pricing";
 import { usagePricingMetadata } from "@/lib/usage-export";
 import { Choice, Segmented } from "./controls";
 import { TrendChart } from "./trend-chart";
+import { PerformancePanel } from "./performance-panel";
+import type { PerformanceState } from "@/hooks/use-performance-report";
 
 export function AnalysisPage({
+  snapshot,
+  performance,
+  state,
+  onChange,
+}: {
+  snapshot: UsageSnapshot;
+  performance: PerformanceState;
+  state: WorkspaceState;
+  onChange: (patch: Partial<WorkspaceState>) => void;
+}) {
+  return (
+    <Tabs
+      value={state.analysisSection}
+      onValueChange={(value) => {
+        if (value === "trend" || value === "performance")
+          onChange({ analysisSection: value });
+      }}
+      className="gap-4"
+    >
+      <div className="border-b">
+        <TabsList
+          variant="line"
+          aria-label="用量分析视图"
+          className="h-10 gap-4"
+        >
+          <TabsTrigger value="trend" className="px-3">
+            用量趋势
+          </TabsTrigger>
+          <TabsTrigger value="performance" className="px-3">
+            请求性能
+          </TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="trend">
+        <UsageTrend snapshot={snapshot} state={state} onChange={onChange} />
+      </TabsContent>
+      <TabsContent value="performance">
+        <PerformancePanel
+          state={performance}
+          timezone={snapshot.range.timezone}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function UsageTrend({
   snapshot,
   state,
   onChange,

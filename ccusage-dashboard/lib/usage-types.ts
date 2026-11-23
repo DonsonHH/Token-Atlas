@@ -1,5 +1,6 @@
 import type { UsageRange } from "./usage-range";
 import type { describeCodexPricing } from "./ccusage-pricing";
+import type { DshRateCard } from "./dsh-pricing";
 
 export const usageSourceOptions = [
   { command: null, label: "全部已识别来源", value: "all" },
@@ -77,8 +78,8 @@ export type UsageSession = UsageTotals & {
   models: string[];
   project: string | null;
   source?: UsageSource;
-  /** At least one counted request was estimated using the DSH Astra rate card. */
-  hasAstraEstimate?: true;
+  /** Rate cards actually used by counted DSH requests in this session. */
+  dshRateCards?: DshRateCard[];
 };
 
 export type UsageModel = UsageTotals & {

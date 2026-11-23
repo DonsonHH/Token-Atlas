@@ -34,9 +34,15 @@ export function SourcesPage({
   const [audit, setAudit] = useState(false);
   const {
     codexPricing,
-    dshPricing: pricing,
+    dshPricing: deepseekPricing,
     dshAstraPricing: astraPricing,
+    dshOpusPricing: opusPricing,
   } = usagePricingMetadata(snapshot);
+  const rateCards = [
+    ["DeepSeek", deepseekPricing],
+    ["OpenAI Astra", astraPricing],
+    ["Claude Opus 5.5", opusPricing],
+  ] as const;
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -205,34 +211,25 @@ export function SourcesPage({
             · 核对日期 {codexPricing.checkedAt} · {codexPricing.basis}
           </p>
         ) : null}
-        {pricing ? (
-          <p className="mt-4 border-t pt-4 text-xs text-muted-foreground">
-            DSH：
-            <a
-              className="underline underline-offset-4"
-              href={pricing.source}
-              target="_blank"
-              rel="noreferrer"
-            >
-              DeepSeek 官网美元价
-            </a>{" "}
-            · 北京时间峰谷 · 核对于 {pricing.checkedAt} ·
-            按当前价格回算，非实际账单
-          </p>
-        ) : null}
-        {astraPricing ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            DSH Astra：
-            <a
-              className="underline underline-offset-4"
-              href={astraPricing.source}
-              target="_blank"
-              rel="noreferrer"
-            >
-              OpenAI 官网美元价
-            </a>{" "}
-            · 核对日期 {astraPricing.checkedAt} · {astraPricing.basis}
-          </p>
+        {rateCards.some(([, card]) => card) ? (
+          <div className="mt-4 space-y-2 border-t pt-4 text-xs text-muted-foreground">
+            {rateCards.map(([name, card]) =>
+              card ? (
+                <p key={card.id}>
+                  DSH ·{" "}
+                  <a
+                    className="underline underline-offset-4"
+                    href={card.source}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {name} 官网美元价
+                  </a>{" "}
+                  · 核对日期 {card.checkedAt} · {card.basis}
+                </p>
+              ) : null,
+            )}
+          </div>
         ) : null}
       </DashboardPanel>
       {importTarget ? (

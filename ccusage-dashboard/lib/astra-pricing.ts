@@ -1,4 +1,4 @@
-import type { UsageSnapshot, UsageTotals } from "./usage-types";
+import type { UsageTotals } from "./usage-types";
 
 export const astraPricingReference = {
   id: "openai-astra-standard-usd-2026-11-15",
@@ -59,17 +59,4 @@ export function astraReferenceCostUSD(
     cacheCreationTokens * (long ? 25_000 : 12_500) +
     outputTokens * (long ? 75_000 : 50_000);
   return Number.isSafeInteger(nanoUSD) ? nanoUSD / 1_000_000_000 : null;
-}
-
-export function dshAstraPricingMetadata(
-  snapshot: Pick<UsageSnapshot, "activeDeviceIds" | "sessions">,
-) {
-  if (
-    snapshot.activeDeviceIds.includes("local") &&
-    snapshot.sessions.some(
-      ({ source, hasAstraEstimate }) =>
-        source === "dsh" && hasAstraEstimate === true,
-    )
-  )
-    return astraPricingReference;
 }

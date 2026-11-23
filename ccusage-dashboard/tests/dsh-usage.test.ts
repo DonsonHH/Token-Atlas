@@ -241,7 +241,43 @@ test("DSH Astra can estimate when cache counts are known or reconciled by an exa
     assert.equal(report.daily[0].totalTokens, 30);
     assert.equal(report.daily[0].costUSD, 0.0007);
     assert.equal(report.daily[0].unpricedModels, undefined);
-    assert.equal(report.sessions[0].hasAstraEstimate, true);
+    assert.deepEqual(report.sessions[0].dshRateCards, ["astra"]);
+  }));
+
+test("DSH retains explicit USD, and does not guess prices for unknown Opus variants or incomplete counters", async () =>
+  fixture(async (home) => {
+    const stored = event("stored-opus");
+    stored.data.message.source.model = "claude-opus-5-5";
+    const incomplete = event("incomplete-opus");
+    incomplete.data.message.source.model = "claude-opus-5-5";
+    const unknown = event("different-opus");
+    unknown.data.message.source.model = "claude-opus-5-5-unverified-tier";
+    await log(home, "opus-guard", [
+      header("opus-guard"),
+      {
+        ...stored,
+        data: {
+          ...stored.data,
+          usage: { ...stored.data.usage, costUSD: 0.123 },
+        },
+      },
+      {
+        ...incomplete,
+        data: {
+          ...incomplete.data,
+          usage: { inputTokens: 100, outputTokens: 10, totalTokens: 200 },
+        },
+      },
+      unknown,
+    ]);
+    const report = await readDshUsage(range, home);
+    assert.equal(report.daily[0].totalTokens, 450);
+    assert.equal(report.daily[0].costUSD, 0.123);
+    assert.deepEqual(report.daily[0].unpricedModels, [
+      "claude-opus-5-5",
+      "claude-opus-5-5-unverified-tier",
+    ]);
+    assert.equal(report.sessions[0].dshRateCards, undefined);
   }));
 
 test("DSH groups both Flash names in a single model and a single session filter", async () =>

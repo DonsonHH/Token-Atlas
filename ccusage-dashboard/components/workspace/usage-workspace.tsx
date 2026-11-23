@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
@@ -27,12 +27,14 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUsageSnapshot } from "@/hooks/use-usage-snapshot";
+import { requestKey, useUsageSnapshot } from "@/hooks/use-usage-snapshot";
+import { usePerformanceReport } from "@/hooks/use-performance-report";
 import { formatDate } from "@/lib/format";
 import { downloadJsonFile } from "@/lib/download";
 import { buildUsageViewExport, usageExportFileName } from "@/lib/usage-export";
 import { usageSourceOptions } from "@/lib/usage-types";
 import {
+  isPerformanceView,
   workspaceQuery,
   workspaceState,
   type WorkspaceState,
@@ -92,17 +94,38 @@ export function UsageWorkspace() {
   const router = useRouter();
   const state = workspaceState(new URLSearchParams(params.toString()));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const manualRefreshLock = useRef(false);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const { snapshot, devices, loading, error, refresh } = useUsageSnapshot({
+  const scope = {
     days: state.days,
     device: state.device,
     source: state.source,
     startDate: state.start,
     endDate: state.end,
     timezone,
-  });
+  };
+  const { snapshot, devices, loading, error, refresh } =
+    useUsageSnapshot(scope);
+  const timingUnavailable =
+    state.device !== "all" && state.device !== "local"
+      ? "外部汇总不包含请求计时"
+      : state.source !== "all" &&
+          state.source !== "codex" &&
+          state.source !== "dsh"
+        ? "当前 Agent 没有受支持的计时日志"
+        : null;
+  const viewingPerformance = isPerformanceView(state);
+  const timingScope =
+    viewingPerformance && !timingUnavailable ? requestKey(scope) : null;
+  const performance = usePerformanceReport(
+    timingScope,
+    timingUnavailable,
+    Boolean(snapshot) && !loading,
+  );
   const currentPage = pages.find((item) => item.id === state.page)!;
   const PageIcon = currentPage.icon;
+  const refreshesTiming = Boolean(timingScope && snapshot);
   function update(patch: Partial<WorkspaceState>, navigation = false) {
     const url = `${pathname}?${workspaceQuery({ ...state, ...patch })}`;
     if (navigation) {
@@ -111,8 +134,18 @@ export function UsageWorkspace() {
     } else router.replace(url, { scroll: false });
   }
   async function reload() {
-    const id = toast.loading("正在更新用量…", { id: "usage-refresh" });
+    if (manualRefreshLock.current) return;
+    manualRefreshLock.current = true;
+    setManualRefreshing(true);
+    const target = refreshesTiming ? "请求性能" : "用量";
+    const id = toast.loading(`正在更新${target}…`, { id: "usage-refresh" });
     try {
+      if (refreshesTiming) {
+        const result = await performance.refresh();
+        if (result) toast.success("请求性能已更新", { id });
+        else toast.dismiss(id);
+        return;
+      }
       const result = await refresh();
       if (!result) {
         toast.dismiss(id);
@@ -123,6 +156,9 @@ export function UsageWorkspace() {
       else toast.success("用量已更新", { id });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "刷新失败", { id });
+    } finally {
+      manualRefreshLock.current = false;
+      setManualRefreshing(false);
     }
   }
   function exportView() {
@@ -238,12 +274,17 @@ export function UsageWorkspace() {
           <ThemeToggle />
           <Button
             variant="outline"
-            disabled={loading}
+            disabled={loading || manualRefreshing}
             onClick={() => void reload()}
             className="h-9 gap-2 px-2.5"
-            aria-label="刷新用量"
+            aria-label={refreshesTiming ? "刷新请求性能" : "刷新用量"}
           >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+            <RefreshCw
+              className={cn(
+                "size-4",
+                (loading || manualRefreshing) && "motion-safe:animate-spin",
+              )}
+            />
             <span className="hidden text-xs sm:inline">刷新</span>
           </Button>
         </header>
@@ -274,7 +315,8 @@ export function UsageWorkspace() {
                 {currentPage.caption}
               </p>
             </div>
-            {state.page === "overview" || state.page === "analysis" ? (
+            {state.page === "overview" ||
+            (state.page === "analysis" && !viewingPerformance) ? (
               <Button
                 variant="outline"
                 onClick={exportView}
@@ -376,7 +418,7 @@ export function UsageWorkspace() {
               <Button
                 variant="outline"
                 className="h-8 text-xs"
-                disabled={loading}
+                disabled={loading || manualRefreshing}
                 onClick={() => void reload()}
               >
                 重试
@@ -427,12 +469,27 @@ export function UsageWorkspace() {
               {state.page === "overview" ? (
                 <OverviewPage
                   snapshot={snapshot}
-                  onAnalyze={() => update({ page: "analysis" }, true)}
+                  onAnalyze={() =>
+                    update({ page: "analysis", analysisSection: "trend" }, true)
+                  }
+                  onPerformance={
+                    timingUnavailable
+                      ? undefined
+                      : () =>
+                          update(
+                            {
+                              page: "analysis",
+                              analysisSection: "performance",
+                            },
+                            true,
+                          )
+                  }
                 />
               ) : null}
               {state.page === "analysis" ? (
                 <AnalysisPage
                   snapshot={snapshot}
+                  performance={performance}
                   state={state}
                   onChange={update}
                 />

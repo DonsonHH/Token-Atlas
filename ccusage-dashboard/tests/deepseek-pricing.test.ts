@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   deepseekPricePeriod,
   deepseekReferenceCostUSD,
-  dshPricingMetadata,
 } from "../lib/deepseek-pricing";
+import { dshPricingMetadata } from "../lib/dsh-pricing";
+import { createEmptyTotals } from "../lib/usage-domain";
+import type { UsageSession } from "../lib/usage-types";
 
 const usage = {
   inputTokens: 1_000_000,
@@ -174,16 +176,27 @@ test("pricing follows Beijing instants rather than the display timezone", () => 
 });
 
 test("external-only snapshots never claim the local current price card repriced their data", () => {
+  const session: UsageSession = {
+    ...createEmptyTotals(),
+    id: "dsh:fixture",
+    lastActivity: null,
+    models: ["deepseek-flash"],
+    project: null,
+    source: "dsh",
+    dshRateCards: ["deepseek"],
+  };
   assert.equal(
-    dshPricingMetadata({ reader: "dsh", activeDeviceIds: ["external"] }),
+    dshPricingMetadata({ sessions: [session], activeDeviceIds: ["external"] })
+      .dshPricing,
     undefined,
   );
   assert.equal(
-    dshPricingMetadata({ reader: "ccusage", activeDeviceIds: ["local"] }),
+    dshPricingMetadata({ sessions: [], activeDeviceIds: ["local"] }).dshPricing,
     undefined,
   );
   assert.equal(
-    dshPricingMetadata({ reader: "dsh", activeDeviceIds: ["local"] })?.currency,
+    dshPricingMetadata({ sessions: [session], activeDeviceIds: ["local"] })
+      .dshPricing?.currency,
     "USD",
   );
 });

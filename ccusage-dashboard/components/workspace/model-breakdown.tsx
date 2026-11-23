@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart } from "recharts";
-import { Layers3 } from "lucide-react";
+import { ArrowRight, Layers3 } from "lucide-react";
 import { DashboardPanel } from "@/components/dashboard-panel";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,13 @@ import {
 import type { UsageSnapshot } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
 
-export function ModelBreakdown({ snapshot }: { snapshot: UsageSnapshot }) {
+export function ModelBreakdown({
+  snapshot,
+  onPerformance,
+}: {
+  snapshot: UsageSnapshot;
+  onPerformance?: () => void;
+}) {
   const [metric, setMetric] = useState<Exclude<Metric, "cost">>("tokens");
   const [expanded, setExpanded] = useState(false);
   const colors = useMemo(
@@ -51,17 +57,25 @@ export function ModelBreakdown({ snapshot }: { snapshot: UsageSnapshot }) {
       icon={<Layers3 className="size-4" />}
       tone="violet"
       action={
-        <Choice
-          label="模型分布指标"
-          value={metric}
-          onChange={setMetric}
-          options={[
-            { value: "tokens", label: "按总 token" },
-            { value: "inputOutput", label: "按输入 / 输出" },
-            { value: "cacheRead", label: "按缓存读取" },
-          ]}
-          className="h-9 text-xs"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Choice
+            label="模型分布指标"
+            value={metric}
+            onChange={setMetric}
+            options={[
+              { value: "tokens", label: "按总 token" },
+              { value: "inputOutput", label: "按输入 / 输出" },
+              { value: "cacheRead", label: "按缓存读取" },
+            ]}
+            className="h-9 text-xs"
+          />
+          {onPerformance ? (
+            <Button variant="ghost" size="sm" onClick={onPerformance}>
+              请求性能
+              <ArrowRight className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
       }
     >
       {total ? (

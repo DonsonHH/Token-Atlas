@@ -7,6 +7,7 @@ $runtimeRoot = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-r
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 $node = if ($nodeCommand) { $nodeCommand.Source } else { Join-Path $runtimeRoot "node\bin\node.exe" }
 $next = Join-Path $PSScriptRoot "..\node_modules\next\dist\bin\next"
+$launcher = Join-Path $PSScriptRoot "run-local.mjs"
 
 if (-not (Test-Path -LiteralPath $node)) {
   Write-Error "未找到可用的 Node.js。请安装 Node.js 20.9+ 后运行 pnpm dev。"
@@ -19,9 +20,37 @@ if (-not (Test-Path -LiteralPath $next)) {
 }
 
 $dashboardRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-Push-Location -LiteralPath $dashboardRoot
+$mutex = [System.Threading.Mutex]::new($false, "Local\TokenAtlas.Port.$Port")
+$chosen = $false
 try {
-  & $node $next dev --port $Port
+  try { $chosen = $mutex.WaitOne(0) }
+  catch [System.Threading.AbandonedMutexException] { $chosen = $true }
+  if (-not $chosen) { exit 0 }
+
+  Push-Location -LiteralPath $dashboardRoot
+  try {
+    $built = Get-Item -LiteralPath (Join-Path $dashboardRoot '.next\BUILD_ID') -ErrorAction SilentlyContinue
+    $mustBuild = -not $built
+    if ($built) {
+      $sources = foreach ($directory in 'app', 'components', 'hooks', 'lib', 'public') {
+        Get-ChildItem -LiteralPath (Join-Path $dashboardRoot $directory) -Recurse -File
+      }
+      $sources += Get-ChildItem -LiteralPath $dashboardRoot -File |
+        Where-Object { $_.Name -in 'next.config.ts','package.json','pnpm-lock.yaml','postcss.config.mjs','tsconfig.json' }
+      $mustBuild = [bool]($sources | Where-Object { $_.LastWriteTimeUtc -gt $built.LastWriteTimeUtc } | Select-Object -First 1)
+    }
+    if ($mustBuild) {
+      & $node $next build
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    # The desktop app is not a development environment. No bundler, file
+    # watcher or HMR stays running after the one-off production build.
+    & $node $launcher start --port $Port
+    exit $LASTEXITCODE
+  } finally {
+    Pop-Location
+  }
 } finally {
-  Pop-Location
+  if ($chosen) { $mutex.ReleaseMutex() }
+  $mutex.Dispose()
 }

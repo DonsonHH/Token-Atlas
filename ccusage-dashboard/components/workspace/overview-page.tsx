@@ -86,9 +86,11 @@ function Stat({
 export function OverviewPage({
   snapshot,
   onAnalyze,
+  onPerformance,
 }: {
   snapshot: UsageSnapshot;
   onAnalyze: () => void;
+  onPerformance?: () => void;
 }) {
   const [exact, setExact] = useState(true);
   const { totals, daily, range } = snapshot;
@@ -194,7 +196,7 @@ export function OverviewPage({
         </div>
         <TrendChart periods={periods} compact />
       </DashboardPanel>
-      <ModelBreakdown snapshot={snapshot} />
+      <ModelBreakdown snapshot={snapshot} onPerformance={onPerformance} />
     </div>
   );
 }

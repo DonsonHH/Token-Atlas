@@ -28,6 +28,7 @@ Token Atlas 通过 ccusage 和 DSH 只读适配器，在你的机器上汇总 Ag
 | 总共用了多少？     | 概览：精确 token / 紧凑单位切换、输入输出、缓存占比和 API 参考价。 |
 | 用量何时发生变化？ | 用量分析：日、周、月趋势，按总量或模型拆分，查看和导出周期明细。   |
 | 哪次会话消耗较多？ | 会话：搜索、模型筛选、排序、分页、详情与结果导出。                 |
+| 模型响应有多快？   | 用量分析 → 请求性能：按模型比较速度、首字，查看近期样本。           |
 | 外部设备更新了吗？ | 数据源：逐台查看覆盖日期、导出时间，并直接粘贴或上传 JSON。        |
 
 ## 支持的 Agent 与数据范围
@@ -78,7 +79,17 @@ pnpm dev
 .\scripts\open-dashboard.ps1
 ```
 
-脚本会检查本地服务；服务未运行时会后台启动，再打开浏览器。依赖升级后只需重新执行一次 `pnpm install`。
+脚本会检查本地服务；未运行时只启动一个生产实例，再打开浏览器。首次或源码更新时构建一次，平时不运行开发监听器。依赖升级后请重新执行 `pnpm install`。
+
+### 输出速度与首字
+
+进入「用量分析 → 请求性能」，可按模型比较速度与首字中位数，也可切换到近期请求样本。「概览 → 模型分布」里的「请求性能」可直达该页签。日期、时区、设备与 Agent 筛选保持不变。**直接读 Codex 和 DSH 的原始会话日志，不需要安装或运行 CC Switch，不改代理配置。**
+
+`≈` 表示日志估算。速度按有效样本的总输出除以总耗时（含等首字），首字取首个有效输出的中位数，可能包括思考或工具输出。没有可靠锚点的记录显示「—」。「计时说明」解释口径；报告不完整时显示「部分覆盖」，不堆叠扫描文件数。
+
+只在打开「请求性能」时读计时，页面可见时每约 60 秒静默更新；离开页签或隐藏时暂停。概览与趋势不扫描计时。手动刷新只更新当前视图需要的数据。相同范围的并发读取共享结果，不会为每个标签页重扫。
+
+计时是一份有资源上限的样本：每个 Agent 最多选 128 份候选文件、每份保留 256 条；每批最多解码 24 MiB、每份最多 8 MiB。过大的明文读尾段，压缩日志读有界前段；压缩计时需要支持原生 Zstandard 的 Node.js（推荐 24 LTS）。触及上限会标为部分覆盖，包括「全部日期」。需要观察较早的模型时可把日期缩小到对应时段。**限制只作用于计时，既有 token／参考价和 Jetson 汇总口径不变。** 只选外部设备时不会显示本机计时。详见 [原生日志计时调研](docs/native-request-timing-research.md)。
 
 ## 从 Ubuntu / Jetson 导入数据
 
@@ -142,15 +153,15 @@ ccusage `20.0.51` 的离线价表还未收录 `gpt-6.2-astra` 和 `gpt-6.2-sol`�
 
 只统计完成的 `assistant/message` usage。排除最后一个标记 `data.inherited: true` 的 `session/end-seed` 之前的继承历史；普通恢复标记不会删除已发生的用量。按消息 ID 去重，日期与时区沿用全局范围。不会读取 DSH 凭据、请求账户余额、修改日志或展示会话正文。
 
-DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，`cacheWriteTokens` 归为缓存写入，`reasoningTokens` 归为推理输出但不重复累加。日志明确记录的 `costUSD` 优先；缺少费用时，已知 DeepSeek Flash / V4 Pro 模型采用 [DeepSeek 官网美元价](https://api-docs.deepseek.com/quick_start/pricing/)估算。中文页的人民币价格不会直接当作美元，也不通过汇率转换。
+DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，`cacheWriteTokens` 归为缓存写入，`reasoningTokens` 归为推理输出但不重复累加。日志明确记录的 `costUSD` 优先；缺少费用时，只有用量字段能核对一致的请求才按官网美元价逐条估算。中文页的人民币价格不会直接当作美元，也不通过汇率转换。
 
-DeepSeek 价格快照核对于 2026-11-11，按每条用量记录的时间应用北京时间峰谷规则：工作日 9:00–12:00、14:00–18:00 为高峰，周末和已核对的中国节假日全天为空闲。节假日表覆盖 2026 / 2027 年。未知模型或无法确认的计价口径仍保留为待定价。
+DeepSeek Flash / V4 Pro 使用 [DeepSeek 官网美元价](https://api-docs.deepseek.com/quick_start/pricing/)，按请求时间应用北京时间峰谷规则：工作日 9:00–12:00、14:00–18:00 为高峰，周末和已核对的中国节假日全天为空闲。节假日表覆盖 2026 / 2027 年。未知模型或无法确认的计价口径仍保留为待定价。
 
-DSH 的 `gpt-6-astra` 缺少记录费用、且输入和输出计数完整并一致时，按 [OpenAI 官方 Standard 档](https://developers.openai.com/api/docs/models/gpt-6-astra)和[默认 30 分钟缓存写入价](https://developers.openai.com/api/docs/guides/prompt-caching)逐请求估算，超过 272,000 输入 token（含缓存读写）的请求采用长上下文费率。只有实际采用这套费率时，页面和导出才标注 Astra 价表。不会重算 ccusage 的 Codex 费用，也不代表 DSH 网关的实际档位或账单。
+DSH 的 `gpt-6-astra` 按 [OpenAI 官方 Standard 档](https://developers.openai.com/api/docs/models/gpt-6-astra)和[默认 30 分钟缓存写入价](https://developers.openai.com/api/docs/guides/prompt-caching)估算。超过 272,000 输入 token（含缓存读写）的请求采用长上下文费率。DSH 的 `claude-opus-5-5` 使用 [Anthropic 官网 Standard 全球档](https://platform.claude.com/docs/en/about-claude/pricing)：每百万 token 输入 $4、缓存读取 $0.20、默认 5 分钟缓存写入 $5、输出 $20。这组费率已用同一组 token 与 ccusage 的 Claude Code 报告对照。DSH 日志未记录的 Fast、区域附加费或延长缓存时长不按实际账单推断。
 
 模型分布、趋势拆分和会话筛选会把 `deepseek-v4.1-flash` 归到官网 API 名 `deepseek-flash`，会话搜索仍兼容两个名字。原始日志和已导入报告的费用不变，缺价提示仍限定在受影响的记录，旧版 `deepseek-v4-flash` 及 Pro 仍单独统计。
 
-这里使用当前官网价格回算 API 参考值，不复原历史账单，也不等于网关实际收费；不含无法从 token 用量确认的 Search / Fetch 独立请求费用。导出包含本机采用的价格来源、核对日期和计价说明，外部导入金额不自动重新定价。ccusage 的 `pricingOverrides` 不会作用于独立 DSH 适配器。详见 [DSH 官网计价与推送前审查](docs/dsh-pricing-review.md)。
+这里使用当前官网价格回算 API 参考值，不复原历史账单，也不等于网关实际收费；不含无法从 token 用量确认的 Search / Fetch 独立请求费用。数据源页面和导出只注明当前范围实际采用的官网价表及其核对日期。外部导入金额不自动重新定价。ccusage 的 `pricingOverrides` 不会作用于独立 DSH 适配器。详见 [DSH 官网计价与推送前审查](docs/dsh-pricing-review.md)。
 
 导入的是导出时的汇总，升级本机读取器不会重新计算另一台设备的旧成本；请在原设备使用新版脚本重新导出，再更新对应数据源。只有具备可靠价格来源时，才应使用 ccusage 的 [`pricingOverrides`](https://ccusage.com/guide/config-files) 配置覆盖单模型价格。
 
@@ -158,7 +169,7 @@ DSH 的 `gpt-6-astra` 缺少记录费用、且输入和输出计数完整并一�
 
 ## 架构
 
-页面通过 `/api/usage` 读取当前范围；`/api/import` 接收同源的本地 JSON 导入。数据读取、日期口径、统计推导和页面渲染分别维护。
+页面通过 `/api/usage` 读取用量；`/api/import` 接收同源的本地 JSON 导入；`/api/performance` 按相同范围读取原始日志计时元数据。数据读取、日期口径、统计推导和页面渲染分别维护。
 
 ```mermaid
 flowchart LR
@@ -179,11 +190,12 @@ flowchart LR
 | `lib/usage-range.ts`          | 日期、时区与范围校验                                   |
 | `lib/usage.ts`                | ccusage 读取编排                                       |
 | `lib/dsh-usage.ts`            | DSH 代次选择、流式解压、继承历史排除与用量投影         |
+| `lib/native-performance.ts`   | Codex / DSH 原生计时阅读、范围过滤及样本聚合           |
 | `lib/usage-snapshot.ts`       | 合并本机 / 导入，统一日、周、月与模型汇总              |
 | `lib/usage-analytics.ts`      | 补齐日期、按指标求均值、无遗漏模型堆叠                 |
 | `lib/usage-pricing.ts`        | 区分完整价格、已知小计与未确认价格，统一页面诊断与文案 |
 | `hooks/use-usage-snapshot.ts` | 请求取消、范围身份与失败状态                           |
-| `components/workspace/`       | 页面外壳、范围控件、四个页面与导入交互                 |
+| `components/workspace/`       | 页面外壳、范围控件、用量及请求页面与导入交互           |
 
 本机读取失败时，仍可使用有效的导入数据，并显式显示数据提示。切换筛选时不展示上一范围的结果。详细审查记录见 [重构 review](docs/redesign-review.md)、[价格与读取器复查](docs/pricing-review.md) 与 [压缩日志兼容复查](docs/compressed-history-review.md)。
 
@@ -213,10 +225,10 @@ pnpm build
 pnpm start
 ```
 
-如要在受信任局域网查看，可绑定到局域网地址。请仅在防火墙、VPN 或反向代理鉴权已配置的网络中使用，切勿直接将端口暴露到公网。
+默认只绑定 `127.0.0.1`。如要在受信任局域网查看汇总，可显式绑定到局域网地址并关闭本机计时接口。请仅在防火墙、VPN 或反向代理鉴权已配置的网络中使用，切勿直接将端口暴露到公网。
 
 ```bash
-pnpm start -- --hostname 0.0.0.0 --port 3000
+TOKEN_ATLAS_DISABLE_PERFORMANCE=1 pnpm exec next start --hostname 0.0.0.0 --port 3000
 ```
 
 ## 故障排查
