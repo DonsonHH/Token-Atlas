@@ -80,6 +80,74 @@ test(
     }),
 );
 
+test(
+  "bounded Zstandard timing reads every frame even when Node receives them in one chunk",
+  { skip: !zip },
+  () =>
+    fixture(async ({ codex }) => {
+      assert.ok(zip);
+      await mkdir(codex, { recursive: true });
+      const path = join(codex, "multi-frame.jsonl.zst");
+      const compressed = Buffer.concat([
+        zip(Buffer.from("header\npar")),
+        zip(Buffer.from("tial\nrequest\n")),
+      ]);
+      await writeFile(path, compressed);
+      const lines: string[] = [];
+      const result = await scanJsonl(
+        path,
+        (line) => lines.push(line),
+        compressed.length,
+        4096,
+        {
+          maxBytes: 4096,
+          deadline: Date.now() + 2000,
+        },
+      );
+      assert.deepEqual(lines, ["header", "partial", "request"]);
+      assert.deepEqual(result, {
+        decodedBytes: Buffer.byteLength("header\npartial\nrequest\n"),
+        limited: false,
+      });
+    }),
+);
+
+test(
+  "bounded Zstandard timing checks the deadline even between frames with no output",
+  { skip: !zip },
+  (t) =>
+    fixture(async ({ codex }) => {
+      assert.ok(zip);
+      await mkdir(codex, { recursive: true });
+      const path = join(codex, "skippable-frame.jsonl.zst");
+      // A valid skippable frame crosses the input chunk boundary but has no
+      // decoded bytes, so checking the clock only on output is insufficient.
+      const skippable = Buffer.alloc(8 + 64 * 1024);
+      skippable.writeUInt32LE(0x184d2a50, 0);
+      skippable.writeUInt32LE(skippable.length - 8, 4);
+      const compressed = Buffer.concat([
+        zip(Buffer.from("header\n")),
+        skippable,
+      ]);
+      await writeFile(path, compressed);
+      let now = 1000;
+      t.mock.method(Date, "now", () => now);
+      const lines: string[] = [];
+      const result = await scanJsonl(
+        path,
+        (line) => {
+          lines.push(line);
+          now = 2000;
+        },
+        compressed.length,
+        compressed.length,
+        { maxBytes: compressed.length, deadline: 2000 },
+      );
+      assert.deepEqual(lines, ["header"]);
+      assert.deepEqual(result, { decodedBytes: 7, limited: true });
+    }),
+);
+
 test("a timing refresh serves simultaneous tabs from one work item and caches the result briefly", async () => {
   let clock = 1000;
   const read = createPerformanceReader(() => clock);

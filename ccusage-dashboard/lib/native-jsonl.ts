@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
+import { finished } from "node:stream/promises";
 import { StringDecoder } from "node:string_decoder";
 import type { Transform } from "node:stream";
 import * as zlib from "node:zlib";
@@ -27,6 +28,69 @@ export const logTime = (value: unknown) => {
     : undefined;
 };
 
+type ZstdDecoder = Transform & { readonly bytesWritten: number };
+
+async function readBoundedZstd(
+  source: AsyncIterable<Buffer>,
+  create: () => ZstdDecoder,
+  consume: (chunk: Buffer) => void,
+  checkDeadline: () => void,
+) {
+  let consumerFailure: { reason: unknown } | undefined;
+  function openDecoder() {
+    const stream = create();
+    const done = finished(stream, { cleanup: true });
+    void done.catch(() => {});
+    stream.on("data", (chunk: Buffer) => {
+      try {
+        consume(chunk);
+      } catch (reason) {
+        consumerFailure = { reason };
+        stream.destroy(new Error("Timing decode stopped", { cause: reason }));
+      }
+    });
+    return { stream, done };
+  }
+
+  let decoder = openDecoder();
+  try {
+    for await (const chunk of source) {
+      let offset = 0;
+      while (offset < chunk.length) {
+        // A skippable or empty frame can consume input without calling accept.
+        checkDeadline();
+        const { stream, done } = decoder;
+        const before = stream.bytesWritten;
+        await Promise.race([
+          done,
+          new Promise<void>((resolve, reject) => {
+            stream.write(chunk.subarray(offset), (error) =>
+              error ? reject(error) : resolve(),
+            );
+          }),
+        ]);
+        const consumed = stream.bytesWritten - before;
+        if (consumed <= 0 || consumed > chunk.length - offset)
+          throw new Error("Zstandard decoder did not advance");
+        offset += consumed;
+        if (offset < chunk.length) {
+          // Node 22 may end a write at the first frame and discard its
+          // suffix. Feed the untouched bytes to a fresh, still capped decoder.
+          stream.end();
+          await done;
+          decoder = openDecoder();
+        }
+      }
+    }
+    decoder.stream.end();
+    await decoder.done;
+  } catch (error) {
+    throw consumerFailure ? consumerFailure.reason : error;
+  } finally {
+    decoder.stream.destroy();
+  }
+}
+
 /** Read only complete, newline-terminated records from a fixed file prefix. */
 export async function scanJsonl(
   file: string,
@@ -49,7 +113,7 @@ export async function scanJsonl(
       createZstdDecompress?: (opts?: {
         chunkSize?: number;
         params?: Record<number, number>;
-      }) => Transform;
+      }) => ZstdDecoder;
     }
   ).createZstdDecompress;
   // Tight preview limits must carry through the decompressor's own window.
@@ -144,19 +208,18 @@ export async function scanJsonl(
       throw stopped;
     }
   }
-  const native =
-    compressed && createNative
-      ? createNative(
-          budget
-            ? { chunkSize: 64 * 1024, params: { [windowParam]: 24 } }
-            : undefined,
-        )
-      : undefined;
   try {
-    if (native) {
-      input.on("error", (error) => native.destroy(error));
-      for await (const chunk of input.pipe(native)) accept(chunk);
+    if (compressed && budget && createNative) {
+      await readBoundedZstd(
+        input,
+        () =>
+          createNative({ chunkSize: 64 * 1024, params: { [windowParam]: 24 } }),
+        accept,
+        checkDeadline,
+      );
     } else {
+      // Keep the original multi-frame DSH usage path independent of the
+      // version or experimental availability of Node's native Zstd decoder.
       const fallback = compressed ? new Decompress(accept) : undefined;
       for await (const chunk of input) {
         if (fallback) fallback.push(chunk);
@@ -175,7 +238,6 @@ export async function scanJsonl(
     )
       throw error;
   } finally {
-    native?.destroy();
     input.destroy();
   }
   return finish();
