@@ -1,5 +1,7 @@
 # DSH 官网计价与推送前审查
 
+> 历史记录。当前 DSH 参考价取自 ccusage；本文中的 Token Atlas 自定义价卡已停用。
+
 ## 原始需求与审查范围
 
 用户提供 [DeepSeek 中文官网价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，要求“按照官网定价算就行。做完后 review 一下更新 push 到 github”。用户已确认 review 从上次推送的 `main`（2b8fe54）开始，覆盖全部待推送的 DSH 支持及本次计价。

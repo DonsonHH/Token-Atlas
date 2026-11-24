@@ -151,7 +151,7 @@ export function OverviewPage({
                 ? "已定价部分 · 存在价格缺失"
                 : "缺少可确认的模型价格"
           }
-          hint="参考价来自 ccusage、日志记录费用或 DSH 的官网价估算，不等于实际账单。"
+          hint="参考价来自 ccusage 报表，不等于实际账单。"
         />
       </section>
       <DashboardPanel

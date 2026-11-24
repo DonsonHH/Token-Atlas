@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { supportsRequestTiming } from "../lib/performance-types";
 import {
   isPerformanceView,
   workspaceQuery,
@@ -19,6 +20,9 @@ test("the analysis deep link keeps its tab and filters through a URL round trip"
   assert.equal(url.get("days"), "all");
   assert.deepEqual(workspaceState(url), state);
   assert.equal(isPerformanceView(state), true);
+  assert.equal(supportsRequestTiming(state.source), false);
+  assert.equal(supportsRequestTiming("codex"), true);
+  assert.equal(supportsRequestTiming("all"), true);
 });
 
 test("legacy request links open the performance tab without bringing a request view back to navigation", () => {

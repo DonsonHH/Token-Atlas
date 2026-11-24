@@ -1,10 +1,9 @@
 import { createReadStream } from "node:fs";
-import { open, stat } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { finished } from "node:stream/promises";
 import { StringDecoder } from "node:string_decoder";
 import type { Transform } from "node:stream";
 import * as zlib from "node:zlib";
-import { Decompress } from "fzstd";
 import type { TimingBudget, TimingRead } from "./timing-limits";
 
 export type LogRecord = Record<string, unknown>;
@@ -95,11 +94,9 @@ async function readBoundedZstd(
 export async function scanJsonl(
   file: string,
   consume: (line: string) => void,
-  size?: number,
-  decodedLimit = 512 * 1024 * 1024,
-  budget?: TimingBudget,
+  bytes: number,
+  budget: TimingBudget,
 ): Promise<TimingRead> {
-  const bytes = size ?? (await stat(/* turbopackIgnore: true */ file)).size;
   const stopped = Symbol("timing limit");
   let decoded = 0;
   let limited = false;
@@ -110,10 +107,9 @@ export async function scanJsonl(
     ...(timedOut ? { timedOut } : {}),
   });
   if (!bytes) return finish();
-  if (budget && Date.now() >= budget.deadline)
+  if (Date.now() >= budget.deadline)
     return { decodedBytes: 0, limited: true, timedOut: true };
-  if (budget && budget.maxBytes <= 0)
-    return { decodedBytes: 0, limited: true };
+  if (budget.maxBytes <= 0) return { decodedBytes: 0, limited: true };
   const compressed = /\.zst(?:d)?$/.test(file);
   const createNative = (
     zlib as typeof zlib & {
@@ -123,17 +119,14 @@ export async function scanJsonl(
       }) => ZstdDecoder;
     }
   ).createZstdDecompress;
-  // Tight preview limits must carry through the decompressor's own window.
-  // Older Node runtimes can still read compressed DSH usage via the original
-  // fallback. The optional timing scan won't allocate an unchecked window.
+  // Skip compressed timing on runtimes that cannot bound the decoder window.
   const windowParam = (zlib.constants as unknown as Record<string, number>)
     .ZSTD_d_windowLogMax;
-  if (budget && compressed && (!createNative || windowParam === undefined))
+  if (compressed && (!createNative || windowParam === undefined))
     return { decodedBytes: 0, limited: true };
-  const inputEnd =
-    budget && compressed ? Math.min(bytes, budget.maxBytes) : bytes;
+  const inputEnd = compressed ? Math.min(bytes, budget.maxBytes) : bytes;
   let inputStart = 0;
-  if (budget && !compressed && bytes > budget.maxBytes) {
+  if (!compressed && bytes > budget.maxBytes) {
     // Inspect the ownership header, then sample only a small tail. Every edit
     // to a growing rollout stays bounded, unlike rereading it from byte zero.
     limited = true;
@@ -156,29 +149,25 @@ export async function scanJsonl(
   const input = createReadStream(/* turbopackIgnore: true */ file, {
     start: inputStart,
     end: inputEnd - 1,
-    highWaterMark: budget ? 64 * 1024 : 128 * 1024,
+    highWaterMark: 64 * 1024,
   });
   let tail = "";
   let discard = inputStart > 0;
-  const maxLine = (budget ? 1 : 16) * 1024 * 1024;
+  const maxLine = 1024 * 1024;
   const utf8 = new StringDecoder("utf8");
   function checkDeadline() {
-    if (budget && Date.now() >= budget.deadline) {
+    if (Date.now() >= budget.deadline) {
       limited = true;
       timedOut = true;
       throw stopped;
     }
   }
-  function accept(chunk: Uint8Array) {
+  function accept(chunk: Buffer) {
     checkDeadline();
-    const exhausted =
-      budget !== undefined && chunk.byteLength > budget.maxBytes - decoded;
-    if (budget && exhausted)
-      chunk = chunk.subarray(0, budget.maxBytes - decoded);
+    const exhausted = chunk.byteLength > budget.maxBytes - decoded;
+    if (exhausted) chunk = chunk.subarray(0, budget.maxBytes - decoded);
     decoded += chunk.byteLength;
-    if (decoded > decodedLimit) throw new Error("日志超过单次解析上限");
-    const text =
-      tail + utf8.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const text = tail + utf8.write(chunk);
     let start = 0;
     if (discard) {
       const boundary = text.indexOf("\n");
@@ -199,14 +188,12 @@ export async function scanJsonl(
     ) {
       checkDeadline();
       if (end - start > maxLine) {
-        if (!budget) throw new Error("日志单行过长");
         limited = true;
       } else consume(text.slice(start, end));
       start = end + 1;
     }
     tail = text.slice(start);
     if (tail.length > maxLine) {
-      if (!budget) throw new Error("日志单行过长");
       limited = true;
       discard = true;
       tail = "";
@@ -217,7 +204,7 @@ export async function scanJsonl(
     }
   }
   try {
-    if (compressed && budget && createNative) {
+    if (compressed && createNative) {
       await readBoundedZstd(
         input,
         () =>
@@ -226,20 +213,12 @@ export async function scanJsonl(
         checkDeadline,
       );
     } else {
-      // Keep the original multi-frame DSH usage path independent of the
-      // version or experimental availability of Node's native Zstd decoder.
-      const fallback = compressed ? new Decompress(accept) : undefined;
-      for await (const chunk of input) {
-        if (fallback) fallback.push(chunk);
-        else accept(chunk);
-      }
-      fallback?.push(new Uint8Array(), true);
+      for await (const chunk of input) accept(chunk);
     }
   } catch (error) {
     if (
       error !== stopped &&
       !(
-        budget &&
         inputEnd < bytes &&
         (error as NodeJS.ErrnoException).code === "Z_BUF_ERROR"
       )

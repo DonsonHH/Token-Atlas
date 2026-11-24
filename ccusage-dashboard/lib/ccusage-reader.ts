@@ -22,7 +22,6 @@ export async function readCcusageReport(
 ) {
   const cli = join(process.cwd(), "node_modules", "ccusage", "src", "cli.js");
   if (!existsSync(cli)) throw new Error("ccusage 未安装");
-  if (source === "dsh") throw new Error("DSH 使用独立的本地日志读取器。");
   const namespace = usageSourceOptions.find(
     (item) => item.value === source,
   )?.command;
@@ -41,20 +40,16 @@ export async function readCcusageReport(
       ? ["--sections", "daily,session"]
       : []),
   ];
-  // ccusage 20.1 includes DSH in unified reports. The dashboard keeps a
-  // single DSH reader with its own rate cards, so isolate only the child CLI.
   const config =
     ccusagePackage.version === "20.1.1" &&
     (source === "all" || source === "codex")
       ? await codexFastConfig(command, cwd, env)
       : undefined;
-  const allocate = () => mkdtemp(join(tmpdir(), "token-atlas-ccusage-"));
-  const temporary =
-    source === "all"
-      ? await allocate()
-      : config
-        ? await allocate().catch(() => undefined)
-        : undefined;
+  const temporary = config
+    ? await mkdtemp(join(tmpdir(), "token-atlas-ccusage-")).catch(
+        () => undefined,
+      )
+    : undefined;
   const configFile =
     config && temporary ? join(temporary, "ccusage.json") : undefined;
   try {
@@ -74,7 +69,6 @@ export async function readCcusageReport(
         encoding: "utf8",
         env: {
           ...env,
-          ...(source === "all" && temporary ? { DSH_HOME: temporary } : {}),
           CCUSAGE_TELEMETRY_DISABLED: "1",
           NO_COLOR: "1",
         },

@@ -5,12 +5,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import * as zlib from "node:zlib";
 import test from "node:test";
 import { usagePeriodsFrom, usageSessionsFrom } from "../lib/usage-domain";
 import { assembleUsageSnapshot } from "../lib/usage-snapshot";
 import { resolveUsageRange } from "../lib/usage-range";
 import { readCcusageReport } from "../lib/ccusage-reader";
-import { readDshUsage } from "../lib/dsh-usage";
 import { buildUsageViewExport } from "../lib/usage-export";
 import { validateUsageImport } from "../lib/usage-import-validation";
 
@@ -88,12 +88,13 @@ async function readReport(
   bounds: string[] = [],
   unified = false,
   modelAliases?: string,
+  namespace = "codex",
 ) {
   const { stdout } = await exec(
     process.execPath,
     [
       cli,
-      ...(unified ? [] : ["codex"]),
+      ...(unified ? [] : [namespace]),
       command,
       "--json",
       "--offline",
@@ -283,7 +284,7 @@ test("Jetson export and the installed reader use the same pinned version", async
   assert.ok(script.includes(`ccusage_version="${installed.version}"`));
 });
 
-test("the unified dashboard reader excludes the CLI's native DSH rows even when temporary price settings cannot be written", async (t) => {
+test("focused and unified dashboard reports use native DSH tokens and prices once", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
   try {
     await writeRollout(home, "sessions/2026/07/10/codex.jsonl", plain);
@@ -301,8 +302,14 @@ test("the unified dashboard reader excludes the CLI's native DSH rows even when 
           cwd: "/fixture",
         },
         {
-          type: "assistant/message",
+          type: "request/context",
           seq: 1,
+          time,
+          data: { provider: "deepseek-official", model: "deepseek-flash" },
+        },
+        {
+          type: "assistant/message",
+          seq: 2,
           time,
           data: {
             message: {
@@ -322,27 +329,164 @@ test("the unified dashboard reader excludes the CLI's native DSH rows even when 
       timezone: "Asia/Shanghai",
     });
     const dshHome = join(home, ".dsh");
-    const standalone = await readReport(home, "daily", [], true);
-    assert.equal(usagePeriodsFrom(standalone, "daily")[0].totalTokens, 140);
-    const native = await readCcusageReport("all", "daily", range, {
+    await writeRollout(
+      home,
+      ".ccusage/ccusage.json",
+      JSON.stringify({
+        dsh: {
+          defaults: {
+            pricingOverrides: {
+              "deepseek-flash": {
+                inputCostPerToken: 0.00001,
+                outputCostPerToken: 0.00002,
+              },
+            },
+          },
+        },
+      }),
+    );
+    const options = {
       cwd: home,
       env: { ...fixtureEnvironment(home), DSH_HOME: dshHome },
-    });
-    assert.equal(usagePeriodsFrom(native, "daily")[0].totalTokens, 120);
+    };
+    const bounds = ["--since", range.start, "--until", range.end];
+    const [directDaily, directSessions, directAll] = await Promise.all([
+      readReport(home, "daily", bounds, false, undefined, "dsh"),
+      readReport(home, "session", bounds, false, undefined, "dsh"),
+      readReport(home, "daily", bounds, true),
+    ]);
+    const [dshDay] = usagePeriodsFrom(directDaily, "daily");
+    assert.equal(dshDay.totalTokens, 20);
+    assert.equal(+dshDay.costUSD.toFixed(9), 0.00025);
+    assert.equal(usageSessionsFrom(directSessions).length, 1);
+    assert.equal(usagePeriodsFrom(directAll, "daily")[0].totalTokens, 140);
+
+    const focusedDaily = await readCcusageReport(
+      "dsh",
+      "daily",
+      range,
+      options,
+    );
+    const focusedSessions = await readCcusageReport(
+      "dsh",
+      "session",
+      range,
+      options,
+    );
+    const unified = await readCcusageReport("all", "daily", range, options);
+    assert.deepEqual(usagePeriodsFrom(focusedDaily, "daily"), [dshDay]);
+    assert.deepEqual(
+      usageSessionsFrom(focusedSessions),
+      usageSessionsFrom(directSessions),
+    );
+    assert.deepEqual(
+      usagePeriodsFrom(unified, "daily"),
+      usagePeriodsFrom(directAll, "daily"),
+    );
+    assert.equal(
+      usageSessionsFrom(unified).filter(({ source }) => source === "dsh")
+        .length,
+      1,
+    );
+
     t.mock.method(fs, "writeFile", async () => {
       throw new Error("fixture denied write");
     });
-    const nativeFallback = await readCcusageReport("all", "daily", range, {
-      cwd: home,
-      env: { ...fixtureEnvironment(home), DSH_HOME: dshHome },
-    });
-    assert.equal(usagePeriodsFrom(nativeFallback, "daily")[0].totalTokens, 120);
-    const dsh = await readDshUsage(range, dshHome);
-    assert.equal(dsh.daily[0].totalTokens, 20);
+    const nativeFallback = await readCcusageReport(
+      "all",
+      "daily",
+      range,
+      options,
+    );
+    assert.deepEqual(
+      usagePeriodsFrom(nativeFallback, "daily"),
+      usagePeriodsFrom(directAll, "daily"),
+    );
   } finally {
     await removeFixture(home);
   }
 });
+
+const zstdCompress = (
+  zlib as typeof zlib & { zstdCompressSync?: (data: Buffer) => Buffer }
+).zstdCompressSync;
+
+test(
+  "native compressed DSH history preserves the newest generation and missing price through export",
+  { skip: !zstdCompress },
+  async () => {
+    assert.ok(zstdCompress);
+    const home = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+    try {
+      const time = Date.parse(timestamp);
+      const model = "token-atlas-dsh-fixture-unpriced";
+      const rows = [
+        {
+          type: "session",
+          id: "compressed-dsh",
+          isSeeded: false,
+          createdAt: time,
+          cwd: "/fixture",
+        },
+        {
+          type: "request/context",
+          seq: 1,
+          time,
+          data: { provider: "deepseek-official", model },
+        },
+        {
+          type: "assistant/message",
+          seq: 2,
+          time,
+          data: {
+            usage: { inputTokens: 15, outputTokens: 5, totalTokens: 20 },
+          },
+        },
+      ];
+      const encode = (records: object[]) =>
+        records.map((record) => JSON.stringify(record)).join("\n") + "\n";
+      const history = ".dsh/sessions/test/compressed/";
+      await writeRollout(home, history + "session.v3.jsonl", encode(rows));
+      await writeRollout(
+        home,
+        history + "session.v4.jsonl.zstd",
+        Buffer.concat([
+          zstdCompress(Buffer.from(encode(rows.slice(0, 2)))),
+          zstdCompress(Buffer.from(encode(rows.slice(2)))),
+        ]),
+      );
+      const range = resolveUsageRange({
+        start: "2026-07-10",
+        end: "2026-07-10",
+        timezone: "Asia/Shanghai",
+      });
+      const report = await readCcusageReport("dsh", "daily", range, {
+        cwd: home,
+        env: fixtureEnvironment(home),
+      });
+      const daily = usagePeriodsFrom(report, "daily");
+      const snapshot = assembleUsageSnapshot({
+        range,
+        device: "local",
+        source: "dsh",
+        local: { daily, sessions: [] },
+        imports: { devices: [], dailyByDevice: {}, warnings: [] },
+      });
+      assert.equal(snapshot.totals.totalTokens, 20);
+      assert.deepEqual(snapshot.totals.unpricedModels, [model]);
+      const exported = buildUsageViewExport(
+        { ...snapshot, readerVersion: "20.1.1" },
+        "dsh",
+      );
+      const imported = validateUsageImport(exported, "DSH fixture", "dsh");
+      assert.equal(imported.source, "dsh");
+      assert.equal(imported.readerVersion, "20.1.1");
+      assert.deepEqual(imported.daily[0].unpricedModels, [model]);
+    } finally {
+      await removeFixture(home);
+    }
+  },
+);
 
 test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified reports", async () => {
   const fixtureDir = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));

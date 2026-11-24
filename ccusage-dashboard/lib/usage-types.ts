@@ -1,5 +1,4 @@
 import type { UsageRange } from "./usage-range";
-import type { DshRateCard } from "./dsh-pricing";
 
 export const usageSourceOptions = [
   { command: null, label: "全部已识别来源", value: "all" },
@@ -23,7 +22,7 @@ export const usageSourceOptions = [
   { command: "grok", label: "Grok Build CLI", value: "grok" },
   { command: "zcode", label: "ZCode", value: "zcode" },
   { command: "junie", label: "Junie", value: "junie" },
-  { command: null, label: "DSH · DeepSeek Harness", value: "dsh" },
+  { command: "dsh", label: "DSH · DeepSeek Harness", value: "dsh" },
 ] as const;
 
 export type UsageSource = (typeof usageSourceOptions)[number]["value"];
@@ -78,8 +77,6 @@ export type UsageSession = UsageTotals & {
   models: string[];
   project: string | null;
   source?: UsageSource;
-  /** Rate cards actually used by counted DSH requests in this session. */
-  dshRateCards?: DshRateCard[];
 };
 
 export type UsageModel = UsageTotals & {
@@ -110,7 +107,7 @@ export type UsageSnapshot = {
   monthly: UsagePeriod[];
   offline: true;
   raw: Record<string, unknown>;
-  reader: "ccusage" | "ccusage+dsh" | "dsh";
+  reader: "ccusage";
   readerVersion?: string;
   sessions: UsageSession[];
   source: UsageSource;

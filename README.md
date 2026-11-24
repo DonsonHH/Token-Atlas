@@ -19,7 +19,7 @@
 
 ## 它解决什么问题
 
-Token Atlas 通过 ccusage 和 DSH 只读适配器，在你的机器上汇总 Agent 日志。它适合同时使用多种 Agent、在 Windows 与 Ubuntu / Jetson 之间切换，或希望长期观察 token 规模、缓存复用和模型结构的个人开发者。
+Token Atlas 用 ccusage 在本机汇总 Agent 用量。可以按日期、模型和设备查看 token、缓存与 API 参考价，也可以导入 Ubuntu / Jetson 的离线汇总。
 
 它不上传会话正文，也不需要 API Key。浏览器仅请求本地服务；外部设备只通过你主动复制或导入的 JSON 汇总参与统计。
 
@@ -28,14 +28,14 @@ Token Atlas 通过 ccusage 和 DSH 只读适配器，在你的机器上汇总 Ag
 | 总共用了多少？     | 概览：精确 token / 紧凑单位切换、输入输出、缓存占比和 API 参考价。 |
 | 用量何时发生变化？ | 用量分析：日、周、月趋势，按总量或模型拆分，查看和导出周期明细。   |
 | 哪次会话消耗较多？ | 会话：搜索、模型筛选、排序、分页、详情与结果导出。                 |
-| 模型响应有多快？   | 用量分析 → 请求性能：按模型比较速度、首字，查看近期样本。           |
+| Codex 响应有多快？ | 用量分析 → 请求性能：按模型比较速度、首字，查看近期样本。          |
 | 外部设备更新了吗？ | 数据源：逐台查看覆盖日期、导出时间，并直接粘贴或上传 JSON。        |
 
 ## 支持的 Agent 与数据范围
 
-Token Atlas 使用 ccusage 的离线报告。界面可按已识别来源筛选 Claude Code、OpenAI Codex、OpenCode、Amp、Droid、Codebuff、Cline、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI、Gemini CLI、Antigravity、Grok、ZCode 与 Junie。
+界面可按 ccusage 识别的来源筛选，包括 Claude Code、OpenAI Codex、DeepSeek Harness（DSH）、OpenCode、Amp、Droid、Codebuff、Cline、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI、Gemini CLI、Antigravity、Grok、ZCode 与 Junie。
 
-DeepSeek Harness（`dsh`）使用 Token Atlas 的独立适配器，保留项目的估价和请求计时口径。虽然新版 ccusage 也能读 DSH，综合报告会排除它的那一份，避免重复计算。选择 **DSH · DeepSeek Harness** 可单独查看。
+ccusage 从 [20.1.0](https://github.com/ccusage/ccusage/releases/tag/v20.1.0) 开始原生支持 DSH。选择 **DSH · DeepSeek Harness** 可单独查看用量与会话；选「全部 Agent」时，DSH 由综合报表计入一次。Token Atlas 不再单独读取或补算 DSH。
 
 可用来源取决于本机实际日志。导入表单和命令行脚本优先使用报告中已有的来源；没有来源元数据的旧报告默认按 Codex 处理，导入其他 Agent 时请显式选择真实来源。
 
@@ -83,13 +83,13 @@ pnpm dev
 
 ### 输出速度与首字
 
-进入「用量分析 → 请求性能」，可按模型比较速度与首字中位数，也可切换到近期请求样本。「概览 → 模型分布」里的「请求性能」可直达该页签。日期、时区、设备与 Agent 筛选保持不变。**直接读 Codex 和 DSH 的原始会话日志，不需要安装或运行 CC Switch，不改代理配置。**
+进入「用量分析 → 请求性能」，可按模型查看本机 Codex 的速度、首字中位数和近期样本。「概览 → 模型分布」里的入口会保留日期和筛选。即使选择「全部 Agent」，计时也只覆盖 Codex；DSH 和外部汇总不提供请求计时。无需安装 CC Switch，也不改代理配置。
 
 `≈` 表示日志估算。速度按有效样本的总输出除以总耗时（含等首字），首字取首个有效输出的中位数，可能包括思考或工具输出。没有可靠锚点的记录显示「—」。「计时说明」解释口径，按模型看时也可开启各指标的样本数；报告不完整时显示「部分覆盖」，不堆叠扫描文件数。
 
 只在打开「请求性能」时读计时，页面可见时每约 60 秒静默更新；离开页签或隐藏时暂停。概览与趋势不扫描计时。手动刷新只更新当前视图需要的数据。相同范围的并发读取共享结果，不会为每个标签页重扫。
 
-计时是一份有资源上限的样本：每个 Agent 最多选 128 份候选文件、每份保留 256 条；每批最多解码 24 MiB、每份最多 8 MiB。过大的明文读尾段，压缩日志读有界前段；压缩计时需要支持原生 Zstandard 的 Node.js（推荐 24 LTS）。触及上限会标为部分覆盖，包括「全部日期」。需要观察较早的模型时可把日期缩小到对应时段。**限制只作用于计时，既有 token／参考价和 Jetson 汇总口径不变。** 只选外部设备时不会显示本机计时。详见 [原生日志计时调研](docs/native-request-timing-research.md)。
+计时最多选 128 份候选文件、每份保留 256 条；每批最多解码 24 MiB、每份最多 8 MiB。过大的明文读尾段，压缩日志读有界前段。压缩计时需要支持原生 Zstandard 的 Node.js（推荐 24 LTS）。触及上限时显示「部分覆盖」，可缩小日期范围查询。这些限制不影响 token、参考价或导出。
 
 ## 从 Ubuntu / Jetson 导入数据
 
@@ -103,17 +103,15 @@ pnpm dev
 bash export-jetson-usage.sh
 ```
 
-它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.1.1`，支持普通 `.jsonl` 与压缩的 `.jsonl.zst` 日志；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免漏读压缩历史或继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
+默认导出全部可用日期的 Codex 数据。脚本和网页均固定 ccusage `20.1.1`；已安装版本不匹配时，脚本尝试用 `pnpm dlx` 或 `npx` 运行固定版本。
 
 如需指定文件、设备名称或来源：
 
 ```bash
-bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
+bash export-jetson-usage.sh ~/jetson-dsh.json "NVIDIA Jetson Orin Nano" dsh
 ```
 
-将最后一个参数改为 `all`，可导出 ccusage 识别到的全部来源。
-
-该脚本的 `all` 不包含 DSH。DSH 需要在日志所在设备运行 Token Atlas，按“本机 / DSH”筛选后使用网页“导出汇总”，再导入另一台设备。
+最后一项可用 `codex`、`dsh` 或 `all`。`all` 包含 ccusage 识别的 DSH 用量，是混合来源汇总，不能当成某个 Agent 的数据。导出非 Codex 或混合报表时需要 Python 3 写入来源标签。如果手动运行 `ccusage dsh daily --json --offline`，请在导入时选 DSH。
 
 ### 2. 在网页导入（推荐）
 
@@ -143,42 +141,31 @@ bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
 
 Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目录、活跃时间和本地成本估算。它不会上传、展示或复制会话正文。
 
-“API 参考价”来自 ccusage 的离线定价表、日志明确记录的美元费用或 DSH 的官网价估算。它不是服务商账单、额度或 credits。当前 ccusage 版本固定为 `20.1.1`，网页和 Jetson 导出均关闭 ccusage 遥测。完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
+“API 参考价”来自 ccusage 的离线报表，不是服务商账单、额度或 credits。网页和 Jetson 导出均关闭 ccusage 遥测。完全缺价显示“待定价”，部分缺价显示已定价小计。图表对缺价日期留空；无用量日期才显示零。
 
 ccusage `20.1.1` 已收录 `gpt-6.2-astra` 和 `gpt-6.2-sol` 的原生离线价表。网页只为本机 Codex 补入该版本缺少的 [OpenAI 官方 Fast 2 倍倍率](https://developers.openai.com/api/docs/pricing)，不改 token 费率、自定义价格、模型别名或用户配置。临时设置不可用时仍可按 CLI 原生口径读取。长上下文、Ultrafast 和不同缓存时长未逐档核对，不作为账单依据。Jetson 脚本沿用其 CLI 原生口径，外部汇总保留导出时金额，不自动回算。
 
 ### DSH 本地日志
 
-默认读取 `~/.dsh/sessions/<项目>/<会话>/`，可用 `DSH_HOME` 指定其他 DSH 根目录。支持 v3/v4 的 `.jsonl` 与 `.jsonl.zstd`，每个会话只选择最高格式代次的一份文件；未知格式和读取失败会显示提示。
+ccusage 默认从 `~/.dsh/sessions/` 读取日志，支持 `DSH_HOME`。日志格式、模型识别和参考价由 ccusage 决定。显示结果可能与旧版独立读取器不同；上游未确认的模型和金额保持未确认，不补推测价格。
 
-只统计完成的 `assistant/message` usage。排除最后一个标记 `data.inherited: true` 的 `session/end-seed` 之前的继承历史；普通恢复标记不会删除已发生的用量。按消息 ID 去重，日期与时区沿用全局范围。不会读取 DSH 凭据、请求账户余额、修改日志或展示会话正文。
+界面将 `deepseek-v4.1-flash` 和 `deepseek-flash` 归为一组，不改变金额。
 
-DSH 的 `inputTokens` 按日志口径为非缓存输入；缓存读取单独展示，`cacheWriteTokens` 归为缓存写入，`reasoningTokens` 归为推理输出但不重复累加。日志明确记录的 `costUSD` 优先；缺少费用时，只有用量字段能核对一致的请求才按官网美元价逐条估算。中文页的人民币价格不会直接当作美元，也不通过汇率转换。
-
-DeepSeek Flash / V4 Pro 使用 [DeepSeek 官网美元价](https://api-docs.deepseek.com/quick_start/pricing/)，按请求时间应用北京时间峰谷规则：工作日 9:00–12:00、14:00–18:00 为高峰，周末和已核对的中国节假日全天为空闲。节假日表覆盖 2026 / 2027 年。未知模型或无法确认的计价口径仍保留为待定价。
-
-DSH 的 `gpt-6-astra` 按 [OpenAI 官方 Standard 档](https://developers.openai.com/api/docs/models/gpt-6-astra)和[默认 30 分钟缓存写入价](https://developers.openai.com/api/docs/guides/prompt-caching)估算。超过 272,000 输入 token（含缓存读写）的请求采用长上下文费率。DSH 的 `claude-opus-5-5` 使用 [Anthropic 官网 Standard 全球档](https://platform.claude.com/docs/en/about-claude/pricing)：每百万 token 输入 $4、缓存读取 $0.20、默认 5 分钟缓存写入 $5、输出 $20。这组费率已用同一组 token 与 ccusage 的 Claude Code 报告对照。DSH 日志未记录的 Fast、区域附加费或延长缓存时长不按实际账单推断。
-
-模型分布、趋势拆分和会话筛选会把 `deepseek-v4.1-flash` 归到官网 API 名 `deepseek-flash`，会话搜索仍兼容两个名字。原始日志和已导入报告的费用不变，缺价提示仍限定在受影响的记录，旧版 `deepseek-v4-flash` 及 Pro 仍单独统计。
-
-这里使用当前官网价格回算 API 参考值，不复原历史账单，也不等于网关实际收费；不含无法从 token 用量确认的 Search / Fetch 独立请求费用。数据源页面和导出只注明当前范围实际采用的官网价表及其核对日期。外部导入金额不自动重新定价。ccusage 的 `pricingOverrides` 不会作用于独立 DSH 适配器。详见 [DSH 官网计价与推送前审查](docs/dsh-pricing-review.md)。
-
-导入的是导出时的汇总，升级本机读取器不会重新计算另一台设备的旧成本；请在原设备使用新版脚本重新导出，再更新对应数据源。只有具备可靠价格来源时，才应使用 ccusage 的 [`pricingOverrides`](https://ccusage.com/guide/config-files) 配置覆盖单模型价格。
+已有导入仍保留原金额。需要换用新版口径时，从原设备重新导出并更新同一份数据源。自定义价格请使用 ccusage 的 [`pricingOverrides`](https://ccusage.com/guide/config-files)。
 
 推理输出包含在输出 token 中，不重复累加。导出在浏览器本地完成，导入文件也只保留在你的设备上。
 
 ## 架构
 
-页面通过 `/api/usage` 读取用量；`/api/import` 接收同源的本地 JSON 导入；`/api/performance` 按相同范围读取原始日志计时元数据。数据读取、日期口径、统计推导和页面渲染分别维护。
+`/api/usage` 读取 ccusage 报表并合并外部汇总；`/api/import` 校验和保存本地 JSON；`/api/performance` 单独读取有上限的本机 Codex 计时。
 
 ```mermaid
 flowchart LR
   Browser["浏览器仪表盘"] --> Route["/api/usage"]
   Route --> Reader["readUsageSnapshot"]
   Reader --> Cli["ccusage 离线报告"]
-  Reader --> Dsh["DSH 只读用量适配器"]
   Reader --> Imports["data/devices/*.json"]
-  Cli --> Local["本机 Agent 日志"]
+  Cli --> Local["本机 Agent 日志（含 DSH）"]
   Imports --> Reader
   Reader --> Domain["精确日期范围与统一聚合"]
   Domain --> Snapshot["UsageSnapshot"]
@@ -189,8 +176,8 @@ flowchart LR
 | ----------------------------- | ------------------------------------------------------ |
 | `lib/usage-range.ts`          | 日期、时区与范围校验                                   |
 | `lib/usage.ts`                | ccusage 读取编排                                       |
-| `lib/dsh-usage.ts`            | DSH 代次选择、流式解压、继承历史排除与用量投影         |
-| `lib/native-performance.ts`   | Codex / DSH 原生计时阅读、范围过滤及样本聚合           |
+| `lib/ccusage-reader.ts`       | 调用固定版本的离线 CLI，包含 DSH                       |
+| `lib/native-performance.ts`   | 本机 Codex 请求计时、范围过滤与聚合                    |
 | `lib/usage-snapshot.ts`       | 合并本机 / 导入，统一日、周、月与模型汇总              |
 | `lib/usage-analytics.ts`      | 补齐日期、按指标求均值、无遗漏模型堆叠                 |
 | `lib/usage-pricing.ts`        | 区分完整价格、已知小计与未确认价格，统一页面诊断与文案 |

@@ -38,7 +38,6 @@ import {
 import { downloadJsonFile } from "@/lib/download";
 import { referenceCostLabel } from "@/lib/usage-pricing";
 import { searchableModelNames } from "@/lib/model-names";
-import { usagePricingMetadata } from "@/lib/usage-export";
 import type { UsageSession, UsageSnapshot } from "@/lib/usage-types";
 import { usageSourceLabel } from "@/lib/usage-types";
 import { Choice, Empty } from "./controls";
@@ -112,7 +111,6 @@ export function SessionsPage({
       downloadJsonFile(`token-atlas-sessions-${snapshot.range.end}.json`, {
         range: snapshot.range,
         source: snapshot.source,
-        ...usagePricingMetadata(snapshot, rows),
         model,
         search: query,
         sessions: rows,

@@ -6,7 +6,7 @@ param(
 
   [string]$DeviceName = "NVIDIA Jetson Orin Nano",
 
-  [ValidateSet("all", "claude", "codex", "opencode", "amp", "droid", "codebuff", "cline", "hermes", "pi", "goose", "openclaw", "kilo", "kimi", "qwen", "copilot", "gemini", "antigravity", "grok", "zcode", "dsh")]
+  [ValidateSet("all", "claude", "codex", "opencode", "amp", "droid", "codebuff", "cline", "hermes", "pi", "goose", "openclaw", "kilo", "kimi", "qwen", "copilot", "gemini", "antigravity", "grok", "zcode", "junie", "dsh")]
   [string]$Source = "codex",
 
   [string]$InputPath
@@ -47,8 +47,6 @@ if (-not $PSBoundParameters.ContainsKey('DeviceName') -and -not [string]::IsNull
   $DeviceName = [string]$usage.deviceName
 }
 if (-not $PSBoundParameters.ContainsKey('Source') -and -not [string]::IsNullOrWhiteSpace([string]$usage.source)) {
-  $knownSources = @('all','claude','codex','opencode','amp','droid','codebuff','cline','hermes','pi','goose','openclaw','kilo','kimi','qwen','copilot','gemini','antigravity','grok','zcode','dsh')
-  if ([string]$usage.source -notin $knownSources) { throw 'Unknown source in the report. Pass -Source explicitly.' }
   $Source = [string]$usage.source
 }
 $Source = $Source.ToLowerInvariant()

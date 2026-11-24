@@ -44,12 +44,10 @@ const zip = (
   }
 ).zstdCompressSync;
 
-async function fixture(
-  run: (roots: { codex: string; dsh: string }) => Promise<void>,
-) {
+async function fixture(run: (roots: { codex: string }) => Promise<void>) {
   const dir = await mkdtemp(join(tmpdir(), "token-atlas-native-timing-"));
   try {
-    await run({ codex: join(dir, "codex"), dsh: join(dir, "dsh") });
+    await run({ codex: join(dir, "codex") });
   } finally {
     assert.equal(dirname(dir), resolve(tmpdir()));
     assert.ok(basename(dir).startsWith("token-atlas-native-timing-"));
@@ -78,7 +76,7 @@ test(
       await writeFile(path, zipped);
       let lines = 0;
       const limit = 64 * 1024;
-      const read = await scanJsonl(path, () => lines++, zipped.length, limit, {
+      const read = await scanJsonl(path, () => lines++, zipped.length, {
         maxBytes: limit,
         deadline: Date.now() + 2000,
       });
@@ -105,7 +103,6 @@ test(
         path,
         (line) => lines.push(line),
         compressed.length,
-        4096,
         {
           maxBytes: 4096,
           deadline: Date.now() + 2000,
@@ -146,7 +143,6 @@ test(
           lines.push(line);
           now = 2000;
         },
-        compressed.length,
         compressed.length,
         { maxBytes: compressed.length, deadline: 2000 },
       );
@@ -233,7 +229,7 @@ test("a session cut short by earlier files in its batch can complete on the next
   ];
   const read = () =>
     indexTimingFiles(
-      "dsh",
+      "codex",
       "deadline-retry-fixture",
       files,
       async (file, budget) => {
@@ -273,7 +269,7 @@ test("a recent Codex range does not start indexing unrelated old rollouts", () =
       ]);
       await utimes(file, new Date(base + offset), new Date(base + offset));
     }
-    const report = await readNativePerformance(range, "codex", roots);
+    const report = await readNativePerformance(range, roots.codex);
     assert.equal(report.coverage[0].scanned, 1);
     assert.equal(report.coverage[0].pending, 0);
     assert.equal(report.totals.speed?.samples, 1);
@@ -285,8 +281,7 @@ test("a recent Codex range does not start indexing unrelated old rollouts", () =
         },
         new Date(base),
       ),
-      "codex",
-      roots,
+      roots.codex,
     );
     assert.equal(historical.totals.speed?.samples, 2);
   }));
@@ -319,7 +314,7 @@ test("a large plain rollout supplies bounded tail timing without reading a giant
     } finally {
       await handle.close();
     }
-    const report = await readNativePerformance(range, "codex", roots);
+    const report = await readNativePerformance(range, roots.codex);
     assert.equal(report.totals.speed?.value, 200);
     assert.equal(report.coverage[0].limited, 1);
   }));
@@ -370,7 +365,7 @@ test("native Codex evidence joins timing to the same response, without CC Switch
         }),
       ],
     );
-    const report = await readNativePerformance(range, "all", roots);
+    const report = await readNativePerformance(range, roots.codex);
     assert.equal(report.totals.requests, 1);
     assert.deepEqual(report.totals.speed, { value: 100, samples: 1 });
     assert.deepEqual(report.totals.firstToken, { value: 2000, samples: 1 });
@@ -380,71 +375,6 @@ test("native Codex evidence joins timing to the same response, without CC Switch
         JSON.stringify(report),
       ),
     );
-  }));
-
-test("DSH retries restart timing and an interrupted request or a control frame is not a first token", () =>
-  fixture(async (roots) => {
-    const dsh = (ms: number, type: string, data: object) => ({
-      time: base + ms,
-      seq: ms,
-      type,
-      data,
-    });
-    const step = { turn: 1, step: 1 };
-    const tracked = {
-      message: {
-        id: "fixture-request-dsh",
-        source: { model: "claude-opus-5-5" },
-      },
-      usage: { inputTokens: 500, outputTokens: 440, totalTokens: 940 },
-    };
-    await log(
-      join(roots.dsh, "sessions", "fixture", "stable", "session.v4.jsonl"),
-      [
-        { type: "session", version: 4, id: "fixture-dsh", isSeeded: true },
-        dsh(0, "step/start", step),
-        dsh(5_000, "session/end-seed", { inherited: true }),
-        dsh(6_000, "step/start", step),
-        dsh(8_000, "assistant/attempt", step),
-        dsh(10_000, "llm/retry-started", step),
-        dsh(14_000, "assistant/message", {
-          ...step,
-          ...tracked,
-          stream: [
-            { type: "chunk", time: base + 10_100, chunk: { type: "usage" } },
-            {
-              type: "reasoning-chunks",
-              time0: base + 10_300,
-              texts: ["", "fixture"],
-              dt: [700],
-            },
-            {
-              type: "chunk",
-              time: base + 10_200,
-              chunk: { type: "text-delta", text: "" },
-            },
-          ],
-        }),
-        dsh(14_010, "assistant/message", { ...step, ...tracked, stream: [] }),
-        dsh(20_000, "step/start", { turn: 2, step: 1 }),
-        dsh(30_000, "assistant/message", {
-          turn: 2,
-          step: 1,
-          ...tracked,
-          interrupted: true,
-          message: {
-            id: "fixture-interrupted",
-            source: { model: "claude-opus-5-5" },
-          },
-        }),
-      ],
-    );
-    const report = await readNativePerformance(range, "dsh", roots);
-    assert.equal(report.totals.requests, 1);
-    assert.deepEqual(report.totals.speed, { value: 110, samples: 1 });
-    assert.deepEqual(report.totals.firstToken, { value: 1000, samples: 1 });
-    assert.equal(report.recent[0].durationMs, 4000);
-    assert.ok(!JSON.stringify(report).includes("fixture-request-dsh"));
   }));
 
 test("a late assistant item does not duplicate the same Codex settlement", () =>
@@ -470,7 +400,7 @@ test("a late assistant item does not duplicate the same Codex settlement", () =>
         }),
       ],
     );
-    const report = await readNativePerformance(range, "codex", roots);
+    const report = await readNativePerformance(range, roots.codex);
     assert.equal(report.totals.requests, 1);
     assert.equal(report.recent.length, 1);
   }));
@@ -508,7 +438,7 @@ test("nearby Codex responses with equal usage are not mirrors across distinct ou
         },
       }),
     ]);
-    const result = await readNativePerformance(range, "codex", roots);
+    const result = await readNativePerformance(range, roots.codex);
     assert.equal(result.totals.requests, 2);
     assert.equal(result.recent[0].durationMs, 750);
     assert.equal(result.recent[0].firstTokenMs, 150);
@@ -528,143 +458,44 @@ test("Codex timing follows the configured comma-separated log roots", () =>
         }),
       ]);
     }
-    const result = await readNativePerformance(range, "codex", {
-      ...roots,
-      codex: names.join(", "),
-    });
+    const result = await readNativePerformance(range, names.join(", "));
     assert.equal(result.totals.requests, 2);
     assert.equal(result.coverage[0].scanned, 2);
   }));
 
-test("a narrow historical DSH date range keeps matching sessions ahead of newer ones", () =>
-  fixture(async (roots) => {
-    const session = (id: string) =>
-      join(roots.dsh, "sessions", "fixture", id, "session.v4.jsonl");
-    const later = new Date(base + 7 * 86_400_000);
-    await Promise.all(
-      Array.from({ length: TIMING_SCOPE_FILES }, async (_, index) => {
-        const id = `newer-${index}`;
-        await log(session(id), [
-          { type: "session", version: 4, id, isSeeded: false },
-        ]);
-        await utimes(session(id), later, later);
-      }),
+test("Codex timing keeps discovered rollouts when directory inventory is capped", (t) =>
+  fixture(async ({ codex }) => {
+    const directory = join(codex, "sessions");
+    const valid = join(
+      directory,
+      "rollout-2026-11-23T12-00-00-00000000-0000-4000-8000-000000000019.jsonl",
     );
-    const path = session("historical");
-    await log(path, [
-      { type: "session", version: 4, id: "historical", isSeeded: false },
-      { type: "step/start", seq: 0, time: base, data: { turn: 1, step: 1 } },
-      {
-        type: "assistant/message",
-        seq: 1,
-        time: base + 2000,
-        data: {
-          turn: 1,
-          step: 1,
-          message: {
-            id: "historical-result",
-            source: { model: "deepseek-flash" },
-          },
-          usage: { inputTokens: 100, outputTokens: 600 },
-        },
-      },
-    ]);
-    const date = new Date(base + 2000);
-    await utimes(path, date, date);
-    const report = await readNativePerformance(range, "dsh", roots);
-    assert.equal(report.totals.requests, 1);
-    assert.ok(report.coverage[0].limited > 0);
-  }));
-
-test("DSH timing retains discovered sessions when directory inventory is capped", (t) =>
-  fixture(async (roots) => {
-    const project = join(roots.dsh, "sessions", "fixture");
-    const valid = join(project, "a-valid", "session.v4.jsonl");
-    const junk = join(project, "z-other");
-    await log(valid, [
-      { type: "session", version: 4, id: "valid", isSeeded: false },
-    ]);
-    await mkdir(junk);
-    await utimes(valid, new Date(base), new Date(base));
+    await log(valid, [event(0, "session_meta", { id: "valid-codex" })]);
     const { opendir, readdir } = fs;
-    const fakeDir = (entries: () => Iterable<Dirent>) =>
-      ({
-        async *[Symbol.asyncIterator]() {
-          yield* entries();
-        },
-      }) as Dir;
+    const entries = await readdir(directory, { withFileTypes: true });
     t.mock.method(Date, "now", () => base);
-    t.mock.method(fs, "opendir", async (directory: PathLike) => {
-      if (directory === project) {
-        const entries = await readdir(project, { withFileTypes: true });
-        return fakeDir(() =>
-          entries.sort((a, b) => a.name.localeCompare(b.name)),
-        );
-      }
-      if (directory === junk)
-        return fakeDir(function* () {
-          for (let n = 0; n <= TIMING_INVENTORY_LIMIT; n++)
-            yield { name: `irrelevant-${n}`, isFile: () => false } as Dirent;
-        });
-      return opendir(directory);
+    t.mock.method(fs, "opendir", async (path: PathLike) => {
+      if (path !== directory) return opendir(path);
+      return {
+        async *[Symbol.asyncIterator]() {
+          yield* entries;
+          for (let n = 0; n <= TIMING_INVENTORY_LIMIT; n++) {
+            yield {
+              name: "irrelevant-" + n,
+              isFile: () => false,
+              isDirectory: () => false,
+            } as Dirent;
+          }
+        },
+      } as Dir;
     });
-    const report = await readNativePerformance(range, "dsh", roots);
+    const report = await readNativePerformance(range, codex);
     assert.deepEqual(report.coverage[0], {
-      agent: "dsh",
+      agent: "codex",
       scanned: 1,
       pending: 0,
       skipped: 0,
       limited: 1,
-    });
-  }));
-
-test("DSH timing indexes history in bounded batches and fills it without duplicate requests", () =>
-  fixture(async (roots) => {
-    const pairs = Array.from({ length: 55 }, (_, i) => ({
-      id: `session-${i}`,
-      seq: i + 1,
-    }));
-    await Promise.all(
-      pairs.map(({ id, seq }) =>
-        log(join(roots.dsh, "sessions", "fixture", id, "session.v4.jsonl"), [
-          { type: "session", version: 4, id, isSeeded: false },
-          {
-            type: "step/start",
-            seq: 0,
-            time: base,
-            data: { turn: 1, step: 1 },
-          },
-          {
-            type: "assistant/message",
-            seq,
-            time: base + 2000,
-            data: {
-              turn: 1,
-              step: 1,
-              message: { id, source: { model: "deepseek-flash" } },
-              usage: { inputTokens: 100, outputTokens: 600 },
-              stream: [
-                {
-                  type: "text-chunks",
-                  index: 0,
-                  time0: base + 500,
-                  texts: ["fixture"],
-                  dt: [],
-                },
-              ],
-            },
-          },
-        ]),
-      ),
-    );
-    const first = await readNativePerformance(range, "dsh", roots);
-    assert.ok(first.coverage[0].pending > 0 && first.coverage[0].scanned > 0);
-    const second = await readNativePerformance(range, "dsh", roots);
-    assert.equal(second.coverage[0].pending, 0);
-    assert.equal(second.totals.requests, pairs.length);
-    assert.deepEqual(second.totals.speed, {
-      value: 300,
-      samples: pairs.length,
     });
   }));
 
@@ -736,7 +567,7 @@ test(
         ),
         lines,
       );
-      const report = await readNativePerformance(range, "codex", roots);
+      const report = await readNativePerformance(range, roots.codex);
       assert.deepEqual(
         report.models.map(({ model }) => model),
         ["gpt-owned"],
@@ -754,8 +585,7 @@ test(
         new Date(base + 86_400_000),
       );
       assert.equal(
-        (await readNativePerformance(preceding, "codex", roots)).totals
-          .requests,
+        (await readNativePerformance(preceding, roots.codex)).totals.requests,
         0,
       );
     }),
@@ -779,15 +609,11 @@ test("timing rereads a changed session and never publishes an unterminated tail"
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, records.map((row) => JSON.stringify(row)).join("\n"));
     assert.equal(
-      (await readNativePerformance(range, "codex", roots)).totals.requests,
+      (await readNativePerformance(range, roots.codex)).totals.requests,
       0,
     );
     await log(path, records);
-    const report = await readNativePerformance(range, "codex", roots);
+    const report = await readNativePerformance(range, roots.codex);
     assert.equal(report.totals.requests, 1);
     assert.equal(report.totals.speed?.value, 100);
-    assert.equal(
-      (await readNativePerformance(range, "dsh", roots)).totals.requests,
-      0,
-    );
   }));

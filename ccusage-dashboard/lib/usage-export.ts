@@ -1,10 +1,8 @@
 import type {
   UsageDeviceFilter,
-  UsageSession,
   UsageSnapshot,
   UsageSource,
 } from "./usage-types";
-import { dshPricingMetadata } from "./dsh-pricing";
 
 export type UsageViewExport = Pick<
   UsageSnapshot,
@@ -22,14 +20,7 @@ export type UsageViewExport = Pick<
 > & {
   devices: UsageSnapshot["devices"];
   source: UsageSource;
-} & Partial<ReturnType<typeof usagePricingMetadata>>;
-
-export function usagePricingMetadata(
-  snapshot: Pick<UsageSnapshot, "activeDeviceIds" | "sessions" | "source">,
-  sessions?: UsageSession[],
-) {
-  return dshPricingMetadata(sessions ? { ...snapshot, sessions } : snapshot);
-}
+};
 
 export function buildUsageViewExport(
   snapshot: UsageSnapshot,
@@ -42,7 +33,6 @@ export function buildUsageViewExport(
   return {
     range: snapshot.range,
     reader: snapshot.reader,
-    ...usagePricingMetadata(snapshot),
     // An external-only re-export must not claim the local reader repriced it.
     readerVersion:
       devices.length === 1

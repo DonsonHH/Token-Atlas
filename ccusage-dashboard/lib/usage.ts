@@ -4,11 +4,7 @@ import {
   usageSessionsFrom,
 } from "./usage-domain";
 import { readImportedUsage } from "./usage-imports";
-import {
-  assembleUsageSnapshot,
-  combineLocalUsageReports,
-} from "./usage-snapshot";
-import { readDshUsage } from "./dsh-usage";
+import { assembleUsageSnapshot } from "./usage-snapshot";
 import { readCcusageReport } from "./ccusage-reader";
 import type { UsageSource } from "./usage-types";
 import type { UsageRange } from "./usage-range";
@@ -28,7 +24,6 @@ export async function readUsageSnapshot({
 }) {
   const imports = readImportedUsage();
   const selection = selectUsageDevices(device, imports.devices);
-  let dshDetected = false;
   async function readNative(): Promise<LocalUsageReport> {
     if (source === "all") {
       try {
@@ -66,22 +61,7 @@ export async function readUsageSnapshot({
         : {}),
     };
   }
-  const local = !selection.includeLocal
-    ? null
-    : source === "dsh"
-      ? await readDshUsage(range)
-      : source === "all"
-        ? await (async () => {
-            const [native, dsh] = await Promise.all([
-              readNative(),
-              readDshUsage(range),
-            ]);
-            dshDetected = dsh.detected;
-            return combineLocalUsageReports(
-              dsh.detected ? [native, dsh] : [native],
-            );
-          })()
-        : await readNative();
+  const local = selection.includeLocal ? await readNative() : null;
   const snapshot = assembleUsageSnapshot({
     range,
     device,
@@ -91,12 +71,6 @@ export async function readUsageSnapshot({
   });
   return {
     ...snapshot,
-    reader:
-      source === "dsh"
-        ? ("dsh" as const)
-        : dshDetected
-          ? ("ccusage+dsh" as const)
-          : ("ccusage" as const),
-    readerVersion: source === "dsh" ? undefined : ccusagePackage.version,
+    readerVersion: ccusagePackage.version,
   };
 }

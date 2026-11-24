@@ -19,7 +19,6 @@ import {
 } from "@/lib/usage-types";
 import { formatDate, formatTokens } from "@/lib/format";
 import { ImportSheet } from "./import-sheet";
-import { usagePricingMetadata } from "@/lib/usage-export";
 
 export function SourcesPage({
   snapshot,
@@ -32,16 +31,6 @@ export function SourcesPage({
 }) {
   const [importTarget, setImportTarget] = useState<string | null>(null);
   const [audit, setAudit] = useState(false);
-  const {
-    dshPricing: deepseekPricing,
-    dshAstraPricing: astraPricing,
-    dshOpusPricing: opusPricing,
-  } = usagePricingMetadata(snapshot);
-  const rateCards = [
-    ["DeepSeek", deepseekPricing],
-    ["OpenAI Astra", astraPricing],
-    ["Claude Opus 5.5", opusPricing],
-  ] as const;
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -187,35 +176,13 @@ export function SourcesPage({
           <div>
             <p className="text-muted-foreground">本机读取器</p>
             <p className="mt-2 font-medium">
-              {snapshot.reader === "dsh"
-                ? "DSH 本地日志 · v3/v4"
-                : `ccusage ${snapshot.readerVersion ?? "版本未知"}${snapshot.reader === "ccusage+dsh" ? " + DSH 日志" : " · 离线价格表"}`}
+              ccusage {snapshot.readerVersion ?? "版本未知"} · 离线
             </p>
             <p className="mt-1 text-muted-foreground">
               外部参考价保留导出时口径
             </p>
           </div>
         </div>
-        {rateCards.some(([, card]) => card) ? (
-          <div className="mt-4 space-y-2 border-t pt-4 text-xs text-muted-foreground">
-            {rateCards.map(([name, card]) =>
-              card ? (
-                <p key={card.id}>
-                  DSH ·{" "}
-                  <a
-                    className="underline underline-offset-4"
-                    href={card.source}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {name} 官网美元价
-                  </a>{" "}
-                  · 核对日期 {card.checkedAt} · {card.basis}
-                </p>
-              ) : null,
-            )}
-          </div>
-        ) : null}
       </DashboardPanel>
       {importTarget ? (
         <ImportSheet

@@ -1,5 +1,11 @@
-export type TimingAgent = "codex" | "dsh";
+import type { UsageSource } from "./usage-types";
+
+export type TimingAgent = "codex";
 export const PERFORMANCE_REFRESH_MS = 60_000;
+
+export function supportsRequestTiming(source: UsageSource): boolean {
+  return source === "all" || source === "codex";
+}
 
 /** The public projection contains no session, response or request IDs. */
 export type RequestSample = {
@@ -21,7 +27,6 @@ export type TimingStats = {
 };
 export type TimingModel = TimingStats & {
   model: string;
-  agents: TimingAgent[];
 };
 export type TimingCoverage = {
   agent: TimingAgent;

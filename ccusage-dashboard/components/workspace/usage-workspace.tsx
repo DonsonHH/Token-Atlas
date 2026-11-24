@@ -31,6 +31,7 @@ import { requestKey, useUsageSnapshot } from "@/hooks/use-usage-snapshot";
 import { usePerformanceReport } from "@/hooks/use-performance-report";
 import { formatDate } from "@/lib/format";
 import { downloadJsonFile } from "@/lib/download";
+import { supportsRequestTiming } from "@/lib/performance-types";
 import { buildUsageViewExport, usageExportFileName } from "@/lib/usage-export";
 import { usageSourceOptions } from "@/lib/usage-types";
 import {
@@ -110,10 +111,8 @@ export function UsageWorkspace() {
   const timingUnavailable =
     state.device !== "all" && state.device !== "local"
       ? "外部汇总不包含请求计时"
-      : state.source !== "all" &&
-          state.source !== "codex" &&
-          state.source !== "dsh"
-        ? "当前 Agent 没有受支持的计时日志"
+      : !supportsRequestTiming(state.source)
+        ? "仅支持本机 Codex 请求计时"
         : null;
   const viewingPerformance = isPerformanceView(state);
   const timingScope =
@@ -275,7 +274,9 @@ export function UsageWorkspace() {
           <Button
             variant="outline"
             disabled={loading || manualRefreshing}
-            onClick={() => void reload(refreshesTiming ? "performance" : "usage")}
+            onClick={() =>
+              void reload(refreshesTiming ? "performance" : "usage")
+            }
             className="h-9 gap-2 px-2.5"
             aria-label={refreshesTiming ? "刷新请求性能" : "刷新用量"}
           >

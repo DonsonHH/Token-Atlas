@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readNativePerformance } from "@/lib/native-performance";
 import { readPerformanceOnce } from "@/lib/performance-read-service";
+import { supportsRequestTiming } from "@/lib/performance-types";
 import { resolveUsageRange } from "@/lib/usage-range";
 import { usageSourceOptions } from "@/lib/usage-types";
 
@@ -59,17 +60,19 @@ export async function GET(request: NextRequest) {
       { error: "Agent 来源无效。" },
       { status: 400, headers },
     );
+  if (!supportsRequestTiming(source))
+    return NextResponse.json(
+      { error: "仅支持本机 Codex 请求计时。" },
+      { status: 400, headers },
+    );
   try {
     const key = JSON.stringify([
-      source,
       range.start,
       range.end,
       range.allTime ?? false,
       range.timezone,
     ]);
-    const work = readPerformanceOnce(key, () =>
-      readNativePerformance(range, source),
-    );
+    const work = readPerformanceOnce(key, () => readNativePerformance(range));
     if (!work)
       return NextResponse.json(
         { error: "正在读取另一个范围，计时会在下次刷新时更新。" },

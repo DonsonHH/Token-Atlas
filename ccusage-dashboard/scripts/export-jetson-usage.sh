@@ -6,8 +6,8 @@ device_name="${2:-}"
 agent_source="${3:-codex}"
 ccusage_version="20.1.1"
 
-if [[ "$agent_source" == "dsh" ]]; then
-  echo "请在 Token Atlas 网页筛选本机 / DSH 后导出汇总，以保留 Token Atlas 的计价口径。" >&2
+if [[ "$agent_source" != "codex" ]] && ! command -v python3 >/dev/null 2>&1; then
+  echo "导出 $agent_source 需要 Python 3 写入 Agent 来源，避免导入时被归为 Codex。" >&2
   exit 1
 fi
 
@@ -21,17 +21,12 @@ fi
 
 mkdir -p "$(dirname "$output_path")"
 temporary_path="$(mktemp)"
-empty_dsh_path=""
-trap 'rm -f "$temporary_path"; if [[ -n "$empty_dsh_path" ]]; then rmdir -- "$empty_dsh_path"; fi' EXIT
+trap 'rm -f "$temporary_path"' EXIT
 export CCUSAGE_TELEMETRY_DISABLED=1
 
 command_args=(daily --json --offline)
 if [[ "$agent_source" != "all" ]]; then
   command_args=("$agent_source" "${command_args[@]}")
-else
-  # Keep DSH on Token Atlas's independent pricing/report path.
-  empty_dsh_path="$(mktemp -d)"
-  export DSH_HOME="$empty_dsh_path"
 fi
 
 if command -v ccusage >/dev/null 2>&1 && [[ "$(ccusage --version 2>/dev/null)" == "ccusage $ccusage_version" ]]; then

@@ -27,7 +27,6 @@ import {
 import type { UsageSnapshot } from "@/lib/usage-types";
 import type { WorkspaceState } from "@/lib/workspace-state";
 import { pricingState, referenceCostLabel } from "@/lib/usage-pricing";
-import { usagePricingMetadata } from "@/lib/usage-export";
 import { Choice, Segmented } from "./controls";
 import { TrendChart } from "./trend-chart";
 import { PerformancePanel } from "./performance-panel";
@@ -113,7 +112,6 @@ function UsageTrend({
           grain: state.grain,
           readerVersion: snapshot.readerVersion,
           reader: snapshot.reader,
-          ...usagePricingMetadata(snapshot),
           warnings: snapshot.warnings,
           periods,
         },

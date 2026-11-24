@@ -1,5 +1,7 @@
 # 原生计时实现 Review
 
+> 历史记录。本文含已撤下的 DSH 计时；当前范围以 [实现与验收](native-request-timing-contract.md) 为准。
+
 资源行为另见 [性能复查](native-request-performance-review.md)。本页保留当时的功能审查，不作为内存或 CPU 验收。
 
 审查范围：从本地基线 `b7b2646` 到复审快照 `5f3cb56`。规格见 [实现与验收](native-request-timing-contract.md)，数据契约与 GitHub 备选见 [原生日志计时调研](native-request-timing-research.md)。

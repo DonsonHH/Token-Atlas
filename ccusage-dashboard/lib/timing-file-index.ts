@@ -89,8 +89,7 @@ export async function indexTimingFiles<T extends TimingFile>(
   const key = agent + ":" + root;
   let index = indexes.get(key);
   if (!index) {
-    // The production process has only two configured roots; still bound
-    // retention if more roots are supplied by programmatic callers.
+    // Bound retention when programmatic callers supply more Codex roots.
     if (indexes.size >= 4) {
       const oldest = [...indexes].find(([, item]) => !item.batch);
       if (!oldest)

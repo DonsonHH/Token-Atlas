@@ -308,7 +308,6 @@ async function parseCodexRollout(
       }
     },
     file.size,
-    budget.maxBytes,
     budget,
   );
   return { ...read, samples, skipped: !sawHeader || !thread || ambiguous };

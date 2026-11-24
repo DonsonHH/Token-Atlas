@@ -35,28 +35,17 @@ Product copy is Chinese and deliberately brief.
   sessions/ and archived_sessions/. Test the installed CLI with isolated
   synthetic logs, including duplicate representations, before reader upgrades.
 - Sonner mounts once in the root and follows the app's saved theme.
-- DSH uses the separate Token Atlas reader even though ccusage now has its own
-  DSH namespace. Isolate native DSH in unified reports so the local adapter is
-  counted once; source=dsh bypasses ccusage. Only completed usage from the
-  highest supported session generation counts, after the last explicitly tagged
-  inherited cut. Untagged restore boundaries must never erase owned usage.
-- DSH preserves explicitly recorded costUSD; otherwise supported models use
-  checked official USD rates per request, before aggregation. Require
-  reconciled input/output/cache counters for each estimate. DeepSeek uses
-  Beijing peak periods and verified holidays. Astra estimates use OpenAI
-  Standard and default 30-minute cache writes, with the long-context threshold
-  applied to all input. Opus 5.5 uses Anthropic global Standard and default
-  5-minute writes, verified against ccusage's native Claude Code report with
-  identical token buckets. Unknown rates stay unpriced. No implicit FX conversion.
+- DSH uses ccusage's native daily and session reports, including pricing and
+  visible missing-price diagnostics. In all-agent scope, use the one unified
+  report. Pass through `DSH_HOME`; do not re-parse DSH logs, reprice them, or
+  add rate cards that the native report did not produce.
 - Normalize `deepseek-v4.1-flash` to `deepseek-flash` in report models, session
   names and pricing diagnostics. This only groups existing usage, without
   repricing imports or merging older V4 Flash generations. Match report-wide
   price hints to raw names before grouping; row-level diagnostics take precedence.
   Session search accepts either name.
-- Official API-equivalent estimates are not gateway bills. Keep the source,
-  check date and current-rate-card basis visible. Show only cards actually used
-  by counted requests in scope; never read DSH credentials.
-- Request timing is a read-only projection of native Codex and DSH logs.
+- Request timing is a read-only projection of Codex logs only, including in
+  all-agent scope. DSH, other agents, and external devices have no timing data.
   It never requires CC Switch software, database, or proxy. Do not add
   timing evidence as usage or costs. Keep turn-level TTFT separate from
   request-level estimates. Leave unproven values empty, show sample counts,

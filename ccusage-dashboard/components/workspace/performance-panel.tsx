@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 import { Choice, Empty } from "./controls";
 import { TimingValue } from "./timing-values";
 
-const agentLabel = { codex: "Codex", dsh: "DSH" };
 const numeric = "text-right tabular-nums";
 type PerformanceDetail = "models" | "samples";
 
@@ -52,8 +51,8 @@ function TimingMethod({
       >
         <p className="font-medium">计时说明</p>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          ≈ 表示本机 Codex 或 DSH
-          日志估算。速度按输出与总耗时计算，包含等待；首字是首个模型输出，可能是思考或工具调用。
+          ≈
+          表示日志估算。速度包含等待；首字是首个模型输出，可能来自思考或工具调用。
         </p>
         {partial ? (
           <p className="text-xs leading-relaxed text-muted-foreground">
@@ -94,7 +93,7 @@ function ModelTimingTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {models.map(({ model, agents, requests, speed, firstToken }) => (
+        {models.map(({ model, requests, speed, firstToken }) => (
           <TableRow key={model} className="h-13">
             <TableCell className="px-3">
               <p
@@ -102,9 +101,6 @@ function ModelTimingTable({
                 title={model}
               >
                 {model}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {agents.map((agent) => agentLabel[agent]).join(" / ")}
               </p>
             </TableCell>
             <TableCell className={cn("hidden sm:table-cell", numeric)}>
@@ -173,9 +169,8 @@ function SampleTimingTable({
               >
                 {row.model}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {agentLabel[row.agent]}{" "}
-                <span className="sm:hidden">· {time.format(row.at)}</span>
+              <p className="text-xs text-muted-foreground sm:hidden">
+                {time.format(row.at)}
               </p>
             </TableCell>
             <TableCell className={cn("hidden md:table-cell", numeric)}>
@@ -213,15 +208,12 @@ export function PerformancePanel({
         pending > 0 || skipped > 0 || limited > 0,
     ) ?? false;
   const hasModels = Boolean(report?.models.length);
-  const emptyTitle = unavailable
-    ? "没有可用的本机计时"
-    : error
-      ? "暂时无法读取计时"
-      : "这个范围没有计时样本";
+  const emptyTitle =
+    unavailable ?? (error ? "暂时无法读取计时" : "这个范围没有计时样本");
 
   return (
     <DashboardPanel
-      title="请求性能"
+      title="Codex 请求性能"
       icon={<Gauge className="size-4" />}
       tone="violet"
       action={
@@ -239,14 +231,16 @@ export function PerformancePanel({
               ]}
             />
           ) : null}
-          <TimingMethod
-            partial={partial}
-            sampleCounts={
-              hasModels && detail === "models"
-                ? { checked: showSamples, onChange: setShowSamples }
-                : undefined
-            }
-          />
+          {!unavailable ? (
+            <TimingMethod
+              partial={partial}
+              sampleCounts={
+                hasModels && detail === "models"
+                  ? { checked: showSamples, onChange: setShowSamples }
+                  : undefined
+              }
+            />
+          ) : null}
         </div>
       }
     >
@@ -280,7 +274,7 @@ export function PerformancePanel({
       ) : (
         <Empty
           title={emptyTitle}
-          detail={unavailable ?? error ?? "试试调整日期或 Agent。"}
+          detail={unavailable ? undefined : (error ?? "试试调整日期。")}
         />
       )}
     </DashboardPanel>
