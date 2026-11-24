@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateRange(1, 65535)]
   [int]$Port = 3000
 )
@@ -20,6 +20,19 @@ if (-not (Test-Path -LiteralPath $next)) {
 }
 
 $dashboardRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$readerManifest = Join-Path $dashboardRoot 'node_modules\ccusage\package.json'
+try {
+  $expectedReader = (Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $dashboardRoot 'package.json') -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop).dependencies.ccusage
+  $installedReader = (Get-Content -Raw -Encoding UTF8 -LiteralPath $readerManifest -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop).version
+} catch {
+  Write-Error '读取器依赖不可用。请先在 ccusage-dashboard 运行 pnpm install --frozen-lockfile。'
+  exit 1
+}
+if (-not $expectedReader -or $installedReader -ne $expectedReader) {
+  Write-Error "ccusage 版本不匹配（已装 $installedReader，需要 $expectedReader）。请先运行 pnpm install --frozen-lockfile。"
+  exit 1
+}
+
 $mutex = [System.Threading.Mutex]::new($false, "Local\TokenAtlas.Port.$Port")
 $chosen = $false
 try {

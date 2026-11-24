@@ -1,8 +1,3 @@
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { promisify } from "node:util";
-
 import {
   selectUsageDevices,
   usagePeriodsFrom,
@@ -14,60 +9,13 @@ import {
   combineLocalUsageReports,
 } from "./usage-snapshot";
 import { readDshUsage } from "./dsh-usage";
-import { describeCodexPricing, withCodexPricing } from "./ccusage-pricing";
-import { usageSourceOptions, type UsageSource } from "./usage-types";
+import { readCcusageReport } from "./ccusage-reader";
+import type { UsageSource } from "./usage-types";
 import type { UsageRange } from "./usage-range";
 import ccusagePackage from "ccusage/package.json";
 import type { LocalUsageReport } from "./usage-types";
 
 export type * from "./usage-types";
-const execFileAsync = promisify(execFile);
-
-async function runCcusage(
-  source: UsageSource,
-  command: string,
-  range: UsageRange,
-  {
-    combined = false,
-    configPath,
-  }: { combined?: boolean; configPath?: string } = {},
-) {
-  const cliPath = join(
-    process.cwd(),
-    "node_modules",
-    "ccusage",
-    "src",
-    "cli.js",
-  );
-  if (!existsSync(cliPath)) throw new Error("ccusage 未安装");
-  if (source === "dsh") throw new Error("DSH 使用独立的本地日志读取器。");
-  const namespace = usageSourceOptions.find(
-    (item) => item.value === source,
-  )?.command;
-  const args = [
-    cliPath,
-    ...(namespace ? [namespace] : []),
-    command,
-    "--json",
-    "--offline",
-    ...(configPath ? ["--config", configPath] : []),
-    ...(range.allTime ? [] : ["--since", range.start]),
-    "--until",
-    range.end,
-    "--timezone",
-    range.timezone,
-    ...(combined ? ["--sections", "daily,session"] : []),
-  ];
-  const { stdout } = await execFileAsync(process.execPath, args, {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    env: { ...process.env, NO_COLOR: "1" },
-    maxBuffer: 32 * 1024 * 1024,
-    timeout: 60_000,
-    windowsHide: true,
-  });
-  return JSON.parse(stdout) as unknown;
-}
 
 export async function readUsageSnapshot({
   range,
@@ -81,14 +29,10 @@ export async function readUsageSnapshot({
   const imports = readImportedUsage();
   const selection = selectUsageDevices(device, imports.devices);
   let dshDetected = false;
-  let codexPricing: ReturnType<typeof describeCodexPricing>;
-  async function readNative(configPath?: string): Promise<LocalUsageReport> {
+  async function readNative(): Promise<LocalUsageReport> {
     if (source === "all") {
       try {
-        const report = await runCcusage(source, "daily", range, {
-          combined: true,
-          configPath,
-        });
+        const report = await readCcusageReport(source, "daily", range);
         return {
           daily: usagePeriodsFrom(report, "daily"),
           sessions: usageSessionsFrom(report),
@@ -102,8 +46,8 @@ export async function readUsageSnapshot({
       }
     }
     const [days, sessions] = await Promise.allSettled([
-      runCcusage(source, "daily", range, { configPath }),
-      runCcusage(source, "session", range, { configPath }),
+      readCcusageReport(source, "daily", range),
+      readCcusageReport(source, "session", range),
     ]);
     return {
       daily:
@@ -122,16 +66,6 @@ export async function readUsageSnapshot({
         : {}),
     };
   }
-  function readCcusage() {
-    return withCodexPricing(
-      { source, version: ccusagePackage.version },
-      async ({ path, supplementedModels }) => {
-        const report = await readNative(path);
-        codexPricing = describeCodexPricing(source, report, supplementedModels);
-        return report;
-      },
-    );
-  }
   const local = !selection.includeLocal
     ? null
     : source === "dsh"
@@ -139,7 +73,7 @@ export async function readUsageSnapshot({
       : source === "all"
         ? await (async () => {
             const [native, dsh] = await Promise.all([
-              readCcusage(),
+              readNative(),
               readDshUsage(range),
             ]);
             dshDetected = dsh.detected;
@@ -147,7 +81,7 @@ export async function readUsageSnapshot({
               dsh.detected ? [native, dsh] : [native],
             );
           })()
-        : await readCcusage();
+        : await readNative();
   const snapshot = assembleUsageSnapshot({
     range,
     device,
@@ -157,9 +91,6 @@ export async function readUsageSnapshot({
   });
   return {
     ...snapshot,
-    ...(codexPricing && snapshot.activeDeviceIds.includes("local")
-      ? { codexPricing, raw: { ...snapshot.raw, codexPricing } }
-      : {}),
     reader:
       source === "dsh"
         ? ("dsh" as const)

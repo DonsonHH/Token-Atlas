@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $port = 3000
 $url = "http://localhost:$port"
@@ -18,13 +18,16 @@ if (-not (Test-TokenAtlasReady)) {
     throw "Start script not found: $startScript"
   }
 
-  Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$startScript`"" -WindowStyle Hidden
+  $launcher = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$startScript`"" -WindowStyle Hidden -PassThru
 
   # First launch or an edited checkout may need a production build.
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Date) -lt $deadline) {
     if (Test-TokenAtlasReady) {
       break
+    }
+    if ($launcher.HasExited -and $launcher.ExitCode -ne 0) {
+      throw 'Token Atlas 启动失败。请在 ccusage-dashboard 运行 pnpm install --frozen-lockfile 后重试，或直接运行 scripts/start-local.ps1 查看错误。'
     }
 
     Start-Sleep -Seconds 1

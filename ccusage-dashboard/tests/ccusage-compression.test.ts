@@ -1,24 +1,18 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import {
-  mergeUsagePeriods,
-  usagePeriodsFrom,
-  usageSessionsFrom,
-} from "../lib/usage-domain";
+import { usagePeriodsFrom, usageSessionsFrom } from "../lib/usage-domain";
 import { assembleUsageSnapshot } from "../lib/usage-snapshot";
 import { resolveUsageRange } from "../lib/usage-range";
-import { describeCodexPricing, withCodexPricing } from "../lib/ccusage-pricing";
-import {
-  buildUsageViewExport,
-  usagePricingMetadata,
-} from "../lib/usage-export";
+import { readCcusageReport } from "../lib/ccusage-reader";
+import { readDshUsage } from "../lib/dsh-usage";
+import { buildUsageViewExport } from "../lib/usage-export";
 import { validateUsageImport } from "../lib/usage-import-validation";
-import ccusagePackage from "ccusage/package.json";
 
 const exec = promisify(execFile);
 const cli = resolve("node_modules/ccusage/src/cli.js");
@@ -68,6 +62,26 @@ async function writeRollout(
   await writeFile(target, content);
 }
 
+function fixtureEnvironment(
+  home: string,
+  modelAliases?: string,
+): NodeJS.ProcessEnv {
+  return {
+    NODE_ENV: "test",
+    CCUSAGE_MODEL_ALIASES: modelAliases,
+    SystemRoot: process.env.SystemRoot,
+    CODEX_HOME: home,
+    HOME: home,
+    USERPROFILE: home,
+    APPDATA: join(home, "appdata"),
+    LOCALAPPDATA: join(home, "localappdata"),
+    XDG_CONFIG_HOME: join(home, "config"),
+    XDG_DATA_HOME: join(home, "data"),
+    CCUSAGE_TELEMETRY_DISABLED: "1",
+    NO_COLOR: "1",
+  };
+}
+
 async function readReport(
   home: string,
   command: string,
@@ -91,19 +105,7 @@ async function readReport(
     {
       // Do not inherit adapter-specific log roots from the test runner.
       cwd: home,
-      env: {
-        NODE_ENV: "test",
-        CCUSAGE_MODEL_ALIASES: modelAliases,
-        SystemRoot: process.env.SystemRoot,
-        CODEX_HOME: home,
-        HOME: home,
-        USERPROFILE: home,
-        APPDATA: join(home, "appdata"),
-        LOCALAPPDATA: join(home, "localappdata"),
-        XDG_CONFIG_HOME: join(home, "config"),
-        XDG_DATA_HOME: join(home, "data"),
-        NO_COLOR: "1",
-      },
+      env: fixtureEnvironment(home, modelAliases),
       windowsHide: true,
       timeout: 15_000,
       maxBuffer: 1024 * 1024,
@@ -281,6 +283,67 @@ test("Jetson export and the installed reader use the same pinned version", async
   assert.ok(script.includes(`ccusage_version="${installed.version}"`));
 });
 
+test("the unified dashboard reader excludes the CLI's native DSH rows even when temporary price settings cannot be written", async (t) => {
+  const home = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    await writeRollout(home, "sessions/2026/07/10/codex.jsonl", plain);
+    const time = Date.parse(timestamp);
+    await writeRollout(
+      home,
+      ".dsh/sessions/test/session/session.v4.jsonl",
+      [
+        {
+          type: "session",
+          version: 4,
+          id: "dsh-overlap",
+          createdAt: time,
+          isSeeded: false,
+          cwd: "/fixture",
+        },
+        {
+          type: "assistant/message",
+          seq: 1,
+          time,
+          data: {
+            message: {
+              id: "dsh-overlap-msg",
+              source: { kind: "model", model: "deepseek-flash" },
+            },
+            usage: { inputTokens: 15, outputTokens: 5, totalTokens: 20 },
+          },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    const range = resolveUsageRange({
+      start: "2026-07-10",
+      end: "2026-07-10",
+      timezone: "Asia/Shanghai",
+    });
+    const dshHome = join(home, ".dsh");
+    const standalone = await readReport(home, "daily", [], true);
+    assert.equal(usagePeriodsFrom(standalone, "daily")[0].totalTokens, 140);
+    const native = await readCcusageReport("all", "daily", range, {
+      cwd: home,
+      env: { ...fixtureEnvironment(home), DSH_HOME: dshHome },
+    });
+    assert.equal(usagePeriodsFrom(native, "daily")[0].totalTokens, 120);
+    t.mock.method(fs, "writeFile", async () => {
+      throw new Error("fixture denied write");
+    });
+    const nativeFallback = await readCcusageReport("all", "daily", range, {
+      cwd: home,
+      env: { ...fixtureEnvironment(home), DSH_HOME: dshHome },
+    });
+    assert.equal(usagePeriodsFrom(nativeFallback, "daily")[0].totalTokens, 120);
+    const dsh = await readDshUsage(range, dshHome);
+    assert.equal(dsh.daily[0].totalTokens, 20);
+  } finally {
+    await removeFixture(home);
+  }
+});
+
 test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified reports", async () => {
   const fixtureDir = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
   try {
@@ -309,23 +372,23 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
           .replace("gpt-5", "gpt-6.2-sol"),
     );
     const bounds = ["--since", "2026-11-18", "--until", "2026-11-18"];
+    const range = resolveUsageRange({
+      start: "2026-11-18",
+      end: "2026-11-18",
+      timezone: "Asia/Shanghai",
+    });
+    const options = { cwd: fixtureDir, env: fixtureEnvironment(fixtureDir) };
     await writeRollout(fixtureDir, ".ccusage/ccusage.json", "{}");
-    const [focused, unified, fast] = await withCodexPricing(
-      {
-        source: "all",
-        version: ccusagePackage.version,
-        cwd: fixtureDir,
-        modelAliases: "",
-      },
-      ({ path }) => {
-        const flags = path ? [...bounds, "--config", path] : bounds;
-        return Promise.all([
-          readReport(fixtureDir, "daily", [...flags, "--speed", "standard"]),
-          readReport(fixtureDir, "daily", flags, true),
-          readReport(fixtureDir, "daily", [...flags, "--speed", "fast"]),
-        ]);
-      },
+    const [focused, unified] = await Promise.all([
+      readReport(fixtureDir, "daily", [...bounds, "--speed", "standard"]),
+      readCcusageReport("all", "daily", range, options),
+    ]);
+    await writeRollout(
+      fixtureDir,
+      ".ccusage/ccusage.json",
+      '{"codex":{"defaults":{"speed":"fast"}}}',
     );
+    const fast = await readCcusageReport("codex", "daily", range, options);
     for (const [report, expected] of [
       [focused, 0.00124],
       [unified, 0.001488],
@@ -333,10 +396,9 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
       const [day] = usagePeriodsFrom(report, "daily");
       assert.equal(day.totalTokens, 240);
       assert.equal(day.unpricedModels, undefined);
-      // Each request has 20 uncached input, 80 cache reads and 20 output tokens.
-      // Unified auto mode charges Sol at the observed Fast rate.
       assert.ok(Math.abs(day.costUSD - expected) < 1e-10);
     }
+
     const sessions = usageSessionsFrom(unified).sort(
       (a, b) => b.costUSD - a.costUSD,
     );
@@ -350,68 +412,79 @@ test("ccusage prices GPT-6.2 Astra and Sol offline in focused and unified report
       Math.abs(usagePeriodsFrom(fast, "daily")[0].costUSD - 0.00248) < 1e-10,
     );
 
-    const modelNames = ["gpt-6.2-astra", "gpt-6.2-sol"];
-    const supplemented = { daily: modelNames, session: modelNames };
-    const focusedWithoutSessions = {
-      daily: usagePeriodsFrom(focused, "daily"),
-      sessions: [],
-    };
-    assert.deepEqual(
-      describeCodexPricing("codex", focusedWithoutSessions, supplemented)
-        ?.dailyModels,
-      modelNames,
-    );
-    const local = { daily: usagePeriodsFrom(unified, "daily"), sessions };
-    const snapshot = {
-      ...assembleUsageSnapshot({
-        range: resolveUsageRange({ start: "2026-11-18", end: "2026-11-18" }),
-        device: "local",
-        source: "all",
-        local,
-        imports: { devices: [], dailyByDevice: {}, warnings: [] },
-      }),
-      codexPricing: describeCodexPricing("all", local, supplemented),
-    };
+    const snapshot = assembleUsageSnapshot({
+      range: resolveUsageRange({ start: "2026-11-18", end: "2026-11-18" }),
+      device: "local",
+      source: "all",
+      local: { daily: usagePeriodsFrom(unified, "daily"), sessions },
+      imports: { devices: [], dailyByDevice: {}, warnings: [] },
+    });
     const exported = buildUsageViewExport(snapshot, "all");
     assert.equal(snapshot.warnings.length, 0);
-    assert.deepEqual(exported.codexPricing?.models, modelNames);
-    assert.equal(exported.codexPricing?.basis, snapshot.codexPricing?.basis);
     assert.equal(
       validateUsageImport(exported, "Fixture", "codex").daily[0].costUSD,
       snapshot.totals.costUSD,
     );
-    assert.deepEqual(
-      usagePricingMetadata(snapshot, [sessions[1]]).codexPricing?.models,
-      ["gpt-6.2-sol"],
+  } finally {
+    await removeFixture(fixtureDir);
+  }
+});
+
+test("native Codex pricing covers bare Astra alongside a dated custom price", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    const bare = "gpt-6.2-astra";
+    const dated = `${bare}-20261118`;
+    await writeRollout(
+      fixtureDir,
+      "sessions/2026/07/10/bare.jsonl",
+      plain.replace("gpt-5", bare),
     );
-    assert.equal(usagePricingMetadata(snapshot, []).codexPricing, undefined);
-    assert.equal(
-      usagePricingMetadata({ ...snapshot, activeDeviceIds: ["external"] })
-        .codexPricing,
-      undefined,
+    await writeRollout(
+      fixtureDir,
+      "sessions/2026/07/10/dated.jsonl",
+      plain
+        .replace("gpt-5", dated)
+        .replaceAll(timestamp, "2026-07-10T00:01:00Z"),
     );
-    const unpricedOtherAgent = usagePeriodsFrom(
-      {
-        daily: [
-          {
-            date: "2026-11-18",
-            totalTokens: 10,
-            models: {
-              "gpt-6.2-sol": { totalTokens: 10, missingPricing: true },
+    await writeRollout(
+      fixtureDir,
+      ".ccusage/ccusage.json",
+      JSON.stringify({
+        codex: {
+          defaults: {
+            pricingOverrides: {
+              [dated]: {
+                inputCostPerToken: 0.00001,
+                cacheReadInputTokenCost: 0.000001,
+                outputCostPerToken: 0.00002,
+              },
             },
           },
-        ],
-      },
-      "daily",
+        },
+      }),
     );
-    const mixedDaily = mergeUsagePeriods(local.daily, unpricedOtherAgent);
-    assert.deepEqual(mixedDaily[0].unpricedModels, ["gpt-6.2-sol"]);
-    const mixedPricing = describeCodexPricing(
-      "all",
-      { daily: mixedDaily, sessions },
-      supplemented,
+    const range = resolveUsageRange({
+      start: "2026-07-10",
+      end: "2026-07-10",
+      timezone: "Asia/Shanghai",
+    });
+    const options = { cwd: fixtureDir, env: fixtureEnvironment(fixtureDir) };
+    const [daily, sessions] = await Promise.all([
+      readCcusageReport("codex", "daily", range, options),
+      readCcusageReport("codex", "session", range, options),
+    ]);
+    const [day] = usagePeriodsFrom(daily, "daily");
+    const costs = new Map(
+      usageSessionsFrom(sessions).map(({ models, costUSD }) => [
+        models[0],
+        +costUSD.toFixed(9),
+      ]),
     );
-    assert.deepEqual(mixedPricing?.dailyModels, modelNames);
+    assert.equal(day.unpricedModels, undefined);
+    assert.equal(+day.costUSD.toFixed(9), 0.001672);
+    assert.equal(costs.get(bare), 0.000992);
+    assert.equal(costs.get(dated), 0.00068);
   } finally {
     await removeFixture(fixtureDir);
   }
@@ -451,50 +524,23 @@ test("Codex pricing preserves the effective user's settings and explicit model o
       "sessions/2026/07/10/sol.jsonl",
       plain.replace("gpt-5", "gpt-6.2-sol"),
     );
-    const path = await withCodexPricing(
-      {
-        source: "codex",
-        version: "20.0.51",
-        cwd: fixtureDir,
-        modelAliases: "",
-      },
-      async ({ path, supplementedModels }) => {
-        assert.ok(path);
-        assert.deepEqual(supplementedModels, {
-          daily: ["gpt-6.2-astra"],
-          session: ["gpt-6.2-astra", "gpt-6.2-sol"],
-        });
-        const config = JSON.parse(await readFile(path, "utf8"));
-        assert.deepEqual(config.defaults, original.defaults);
-        assert.deepEqual(config.commands, original.commands);
-        assert.equal(config.codex.defaults.speed, "fast");
-        assert.equal(
-          config.codex.commands.daily.pricingOverrides["gpt-6.2-sol"],
-          undefined,
-        );
-        assert.equal(
-          config.codex.commands.daily.pricingOverrides["gpt-6.2-astra"]
-            .cacheReadInputTokenCost,
-          0.0000004,
-        );
-        const flags = ["--config", path, "--speed", "standard"];
-        const [dailyResult, sessionResult] = await Promise.all([
-          readReport(fixtureDir, "daily", flags),
-          readReport(fixtureDir, "session", flags),
-        ]);
-        const daily = usagePeriodsFrom(dailyResult, "daily");
-        const sessions = usageSessionsFrom(sessionResult);
-        assert.ok(Math.abs(daily[0].costUSD - 0.00068) < 1e-10);
-        assert.ok(Math.abs(sessions[0].costUSD - 0.000248) < 1e-10);
-        const basis = describeCodexPricing(
-          "codex",
-          { daily, sessions },
-          supplementedModels,
-        );
-        assert.deepEqual(basis?.dailyModels, []);
-        assert.deepEqual(basis?.sessionModels, ["gpt-6.2-sol"]);
-        return path;
-      },
+    const range = resolveUsageRange({
+      start: "2026-07-10",
+      end: "2026-07-10",
+      timezone: "Asia/Shanghai",
+    });
+    const options = { cwd: fixtureDir, env: fixtureEnvironment(fixtureDir) };
+    const [dailyResult, sessionResult] = await Promise.all([
+      readCcusageReport("codex", "daily", range, options),
+      readCcusageReport("codex", "session", range, options),
+    ]);
+    assert.equal(
+      +usagePeriodsFrom(dailyResult, "daily")[0].costUSD.toFixed(9),
+      0.00068,
+    );
+    assert.equal(
+      +usageSessionsFrom(sessionResult)[0].costUSD.toFixed(9),
+      0.000496,
     );
     assert.deepEqual(
       JSON.parse(
@@ -502,7 +548,6 @@ test("Codex pricing preserves the effective user's settings and explicit model o
       ),
       original,
     );
-    await assert.rejects(readFile(path), { code: "ENOENT" });
   } finally {
     await removeFixture(fixtureDir);
   }
@@ -535,27 +580,77 @@ test("Codex pricing keeps the native rate of an explicitly aliased model", async
       "gpt-6.2-sol=custom-sol-route",
       '{"gpt-6.2-sol":"custom-sol-route"}',
     ]) {
-      await withCodexPricing(
-        { source: "codex", version: "20.0.51", cwd: fixtureDir, modelAliases },
-        async ({ path, supplementedModels }) => {
-          assert.ok(path);
-          assert.deepEqual(supplementedModels.daily, ["gpt-6.2-astra"]);
-          const flags = ["--config", path, "--speed", "standard"];
-          const report = await readReport(
-            fixtureDir,
-            "daily",
-            flags,
-            false,
-            modelAliases,
-          );
-          assert.ok(
-            Math.abs(usagePeriodsFrom(report, "daily")[0].costUSD - 0.00068) <
-              1e-10,
-          );
-        },
+      const range = resolveUsageRange({
+        start: "2026-07-10",
+        end: "2026-07-10",
+        timezone: "Asia/Shanghai",
+      });
+      const payload = await readCcusageReport("codex", "daily", range, {
+        cwd: fixtureDir,
+        env: fixtureEnvironment(fixtureDir, modelAliases),
+      });
+      assert.equal(
+        +usagePeriodsFrom(payload, "daily")[0].costUSD.toFixed(9),
+        0.00068,
       );
     }
   } finally {
     await removeFixture(fixtureDir);
+  }
+});
+
+test("a recoverable user setting does not make the dashboard's Codex report fail", async () => {
+  const home = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    await writeRollout(
+      home,
+      "sessions/2026/07/10/astra.jsonl",
+      plain.replace("gpt-5", "gpt-6.2-astra"),
+    );
+    await writeRollout(
+      home,
+      ".ccusage/ccusage.json",
+      '{"defaults":{"json":"invalid-bool"}}',
+    );
+    const plainReport = await readReport(home, "daily");
+    assert.equal(usagePeriodsFrom(plainReport, "daily")[0].totalTokens, 120);
+    const range = resolveUsageRange({
+      start: "2026-07-10",
+      end: "2026-07-10",
+      timezone: "Asia/Shanghai",
+    });
+    const report = await readCcusageReport("codex", "daily", range, {
+      cwd: home,
+      env: fixtureEnvironment(home),
+    });
+    assert.equal(usagePeriodsFrom(report, "daily")[0].totalTokens, 120);
+  } finally {
+    await removeFixture(home);
+  }
+});
+
+test("Codex usage can still be read when the optional Fast config directory cannot be created", async (t) => {
+  const home = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    await writeRollout(
+      home,
+      "sessions/2026/07/10/astra.jsonl",
+      plain.replace("gpt-5", "gpt-6.2-astra"),
+    );
+    const range = resolveUsageRange({
+      start: "2026-07-10",
+      end: "2026-07-10",
+      timezone: "Asia/Shanghai",
+    });
+    t.mock.method(fs, "mkdtemp", async () => {
+      throw new Error("fixture denied allocation");
+    });
+    const report = await readCcusageReport("codex", "daily", range, {
+      cwd: home,
+      env: fixtureEnvironment(home),
+    });
+    assert.equal(usagePeriodsFrom(report, "daily")[0].totalTokens, 120);
+  } finally {
+    await removeFixture(home);
   }
 });

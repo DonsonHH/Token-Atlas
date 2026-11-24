@@ -144,11 +144,6 @@ export function SessionsPage({
         <History className="size-3.5" />
         仅本机 · 日期范围内的会话用量
       </p>
-      {snapshot.codexPricing?.sessionModels.length ? (
-        <p className="text-xs text-muted-foreground">
-          {snapshot.codexPricing.basis}
-        </p>
-      ) : null}
       <div className="grid grid-cols-3 gap-3">
         {[
           ["会话", `${snapshot.sessions.length}`],

@@ -33,9 +33,9 @@ Token Atlas 通过 ccusage 和 DSH 只读适配器，在你的机器上汇总 Ag
 
 ## 支持的 Agent 与数据范围
 
-Token Atlas 使用 ccusage 的离线报告。界面可按已识别来源筛选 Claude Code、OpenAI Codex、OpenCode、Amp、Droid、Codebuff、Cline、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI、Gemini CLI、Antigravity、Grok 与 ZCode。
+Token Atlas 使用 ccusage 的离线报告。界面可按已识别来源筛选 Claude Code、OpenAI Codex、OpenCode、Amp、Droid、Codebuff、Cline、Hermes、pi、Goose、OpenClaw、Kilo、Kimi、Qwen、GitHub Copilot CLI、Gemini CLI、Antigravity、Grok、ZCode 与 Junie。
 
-DeepSeek Harness（`dsh`）通过 Token Atlas 的独立适配器读取。它不是 ccusage 的原生来源；仅升级 ccusage 并不能补齐 DSH 用量。选择 **DSH · DeepSeek Harness** 可单独查看，也会计入“全部 Agent”的本机汇总。
+DeepSeek Harness（`dsh`）使用 Token Atlas 的独立适配器，保留项目的估价和请求计时口径。虽然新版 ccusage 也能读 DSH，综合报告会排除它的那一份，避免重复计算。选择 **DSH · DeepSeek Harness** 可单独查看。
 
 可用来源取决于本机实际日志。导入表单和命令行脚本优先使用报告中已有的来源；没有来源元数据的旧报告默认按 Codex 处理，导入其他 Agent 时请显式选择真实来源。
 
@@ -57,7 +57,7 @@ DeepSeek Harness（`dsh`）通过 Token Atlas 的独立适配器读取。它不�
 ### 前置条件
 
 - Node.js 20.9 或更高版本。
-- pnpm 10 或更高版本；推荐通过 Corepack 启用。
+- pnpm 10 或更高版本；CI 使用 pnpm 10。若 pnpm 11 提示新依赖未达到默认发布年龄门槛，请等待门槛通过，无需关闭保护。
 - 如需分析本机数据，至少有一种受 ccusage 支持的 Agent 日志。
 
 ```powershell
@@ -65,7 +65,7 @@ git clone https://github.com/DonsonHH/Token-Atlas.git
 cd Token-Atlas\ccusage-dashboard
 
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
@@ -103,7 +103,7 @@ pnpm dev
 bash export-jetson-usage.sh
 ```
 
-它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.0.51`，支持普通 `.jsonl` 与压缩的 `.jsonl.zst` 日志；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免漏读压缩历史或继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
+它默认导出全部可用日期的 Codex 数据并打开文件。脚本使用与网页相同的 ccusage `20.1.1`，支持普通 `.jsonl` 与压缩的 `.jsonl.zst` 日志；若已安装版本不同，会依次尝试 `pnpm dlx`、`npx` 运行该版本，以免漏读压缩历史或继续使用旧价格表。只安装 Node.js 的 Ubuntu 也可以使用。
 
 如需指定文件、设备名称或来源：
 
@@ -143,9 +143,9 @@ bash export-jetson-usage.sh ~/jetson-usage.json "NVIDIA Jetson Orin Nano" codex
 
 Token Atlas 处理的是 ccusage 输出中的日期、token、模型、会话目录、活跃时间和本地成本估算。它不会上传、展示或复制会话正文。
 
-“API 参考价”来自 ccusage 的离线定价表、日志明确记录的美元费用或 DSH 的官网价估算。它不是服务商账单、额度或 credits。当前 ccusage 版本固定为 `20.0.51`。完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
+“API 参考价”来自 ccusage 的离线定价表、日志明确记录的美元费用或 DSH 的官网价估算。它不是服务商账单、额度或 credits。当前 ccusage 版本固定为 `20.1.1`，网页和 Jetson 导出均关闭 ccusage 遥测。完全缺价显示“待定价”，部分缺价显示已定价小计，图表对缺价日期留空；没有用量的自然日仍显示零。旧报告中有 token 却没有价格的记录显示为未确认价格，而非确认免费。
 
-ccusage `20.0.51` 的离线价表还未收录 `gpt-6.2-astra` 和 `gpt-6.2-sol`。Token Atlas 为本机 Codex 临时补入 [OpenAI 官网基础费率](https://developers.openai.com/api/docs/pricing)（2026-11-18 核对），按 ccusage 识别的 Fast 模式计 2 倍。当前参考价不含超过 272K 输入的长上下文、Ultrafast 或超出默认时长的缓存写入附加费。数据源页和 JSON 导出会注明此口径。补价只用于该版本，保留当前报表生效的自定义价格和 `CCUSAGE_MODEL_ALIASES`，不修改原日志和配置。独立 ccusage 和 Jetson 导出仍使用原生价表；外部导入金额不自动回算。
+ccusage `20.1.1` 已收录 `gpt-6.2-astra` 和 `gpt-6.2-sol` 的原生离线价表。网页只为本机 Codex 补入该版本缺少的 [OpenAI 官方 Fast 2 倍倍率](https://developers.openai.com/api/docs/pricing)，不改 token 费率、自定义价格、模型别名或用户配置。临时设置不可用时仍可按 CLI 原生口径读取。长上下文、Ultrafast 和不同缓存时长未逐档核对，不作为账单依据。Jetson 脚本沿用其 CLI 原生口径，外部汇总保留导出时金额，不自动回算。
 
 ### DSH 本地日志
 
@@ -243,7 +243,7 @@ TOKEN_ATLAS_DISABLE_PERFORMANCE=1 pnpm exec next start --hostname 0.0.0.0 --port
 
 ### 全部日期中的历史用量突然减少
 
-先检查数据源页面的读取器版本。Codex 的历史日志可能保存为 `.jsonl.zst`；ccusage 20.0.30 不支持该格式，直到 [20.0.33](https://github.com/ccusage/ccusage/releases/tag/v20.0.33) 才加入支持。项目现使用 20.0.51，可直接读取 `sessions/` 和 `archived_sessions/` 下的普通与压缩日志，无需手动解压或修改原日志。
+先检查数据源页面的读取器版本。Codex 的历史日志可能保存为 `.jsonl.zst`；ccusage 20.0.30 不支持该格式，直到 [20.0.33](https://github.com/ccusage/ccusage/releases/tag/v20.0.33) 才加入支持。项目现使用 20.1.1，可直接读取 `sessions/` 和 `archived_sessions/` 下的普通与压缩日志，无需手动解压或修改原日志。
 
 拉取新版项目后运行 `pnpm install`，重启正在运行的网页服务，再刷新全部日期。外部设备若曾用旧版生成报告，需要使用新版导出脚本重新导出并更新对应设备；旧汇总本身无法补出漏读的用量。
 

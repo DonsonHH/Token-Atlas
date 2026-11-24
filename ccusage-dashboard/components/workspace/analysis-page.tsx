@@ -204,12 +204,6 @@ function UsageTrend({
                 ? "无记录日期按 0 展示"
                 : "边界周期仅统计所选日期内的用量"}
         </p>
-        {state.metric === "cost" &&
-        snapshot.codexPricing?.dailyModels.length ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {snapshot.codexPricing.basis}
-          </p>
-        ) : null}
       </DashboardPanel>
       <DashboardPanel
         title="周期明细"

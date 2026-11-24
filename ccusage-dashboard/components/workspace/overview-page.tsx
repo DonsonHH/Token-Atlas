@@ -94,9 +94,6 @@ export function OverviewPage({
 }) {
   const [exact, setExact] = useState(true);
   const { totals, daily, range } = snapshot;
-  const codexPricing = snapshot.codexPricing?.dailyModels.length
-    ? snapshot.codexPricing
-    : undefined;
   const active = daily.filter((day) => day.totalTokens > 0).length;
   const periods = calendarPeriods(daily, range, "daily");
   const peak = daily.reduce<(typeof daily)[number] | null>(
@@ -149,16 +146,12 @@ export function OverviewPage({
           icon={CircleDollarSign}
           detail={
             pricingState(totals) === "complete"
-              ? codexPricing
-                ? "含 GPT-6.2 基础费率估算"
-                : "本地估算 · 非实际账单"
+              ? "本地估算 · 非实际账单"
               : pricingState(totals) === "partial"
-                ? codexPricing
-                  ? "已定价小计 · 含 GPT-6.2 估算"
-                  : "已定价部分 · 存在价格缺失"
+                ? "已定价部分 · 存在价格缺失"
                 : "缺少可确认的模型价格"
           }
-          hint={`参考价来自 ccusage、日志记录费用或 DSH 的官网价估算，不等于实际账单。${codexPricing?.basis ?? ""}`}
+          hint="参考价来自 ccusage、日志记录费用或 DSH 的官网价估算，不等于实际账单。"
         />
       </section>
       <DashboardPanel

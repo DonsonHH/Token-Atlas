@@ -1,5 +1,4 @@
 import type { UsageRange } from "./usage-range";
-import type { describeCodexPricing } from "./ccusage-pricing";
 import type { DshRateCard } from "./dsh-pricing";
 
 export const usageSourceOptions = [
@@ -23,6 +22,7 @@ export const usageSourceOptions = [
   { command: "antigravity", label: "Antigravity", value: "antigravity" },
   { command: "grok", label: "Grok Build CLI", value: "grok" },
   { command: "zcode", label: "ZCode", value: "zcode" },
+  { command: "junie", label: "Junie", value: "junie" },
   { command: null, label: "DSH · DeepSeek Harness", value: "dsh" },
 ] as const;
 
@@ -113,7 +113,6 @@ export type UsageSnapshot = {
   reader: "ccusage" | "ccusage+dsh" | "dsh";
   readerVersion?: string;
   sessions: UsageSession[];
-  codexPricing?: ReturnType<typeof describeCodexPricing>;
   source: UsageSource;
   totals: UsageTotals;
   weekly: UsagePeriod[];

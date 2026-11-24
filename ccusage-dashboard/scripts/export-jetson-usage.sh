@@ -4,10 +4,10 @@ set -Eeuo pipefail
 output_path="${1:-}"
 device_name="${2:-}"
 agent_source="${3:-codex}"
-ccusage_version="20.0.51"
+ccusage_version="20.1.1"
 
 if [[ "$agent_source" == "dsh" ]]; then
-  echo "DSH 由 Token Atlas 本地适配器读取。请在网页筛选本机 / DSH 后导出汇总；ccusage CLI 尚不支持 dsh。" >&2
+  echo "请在 Token Atlas 网页筛选本机 / DSH 后导出汇总，以保留 Token Atlas 的计价口径。" >&2
   exit 1
 fi
 
@@ -21,11 +21,17 @@ fi
 
 mkdir -p "$(dirname "$output_path")"
 temporary_path="$(mktemp)"
-trap 'rm -f "$temporary_path"' EXIT
+empty_dsh_path=""
+trap 'rm -f "$temporary_path"; if [[ -n "$empty_dsh_path" ]]; then rmdir -- "$empty_dsh_path"; fi' EXIT
+export CCUSAGE_TELEMETRY_DISABLED=1
 
 command_args=(daily --json --offline)
 if [[ "$agent_source" != "all" ]]; then
   command_args=("$agent_source" "${command_args[@]}")
+else
+  # Keep DSH on Token Atlas's independent pricing/report path.
+  empty_dsh_path="$(mktemp -d)"
+  export DSH_HOME="$empty_dsh_path"
 fi
 
 if command -v ccusage >/dev/null 2>&1 && [[ "$(ccusage --version 2>/dev/null)" == "ccusage $ccusage_version" ]]; then

@@ -5,7 +5,6 @@ import type {
   UsageSource,
 } from "./usage-types";
 import { dshPricingMetadata } from "./dsh-pricing";
-import { hasPricedCodexModel } from "./usage-pricing";
 
 export type UsageViewExport = Pick<
   UsageSnapshot,
@@ -26,29 +25,10 @@ export type UsageViewExport = Pick<
 } & Partial<ReturnType<typeof usagePricingMetadata>>;
 
 export function usagePricingMetadata(
-  snapshot: Pick<
-    UsageSnapshot,
-    "activeDeviceIds" | "sessions" | "source" | "codexPricing"
-  >,
+  snapshot: Pick<UsageSnapshot, "activeDeviceIds" | "sessions" | "source">,
   sessions?: UsageSession[],
 ) {
-  const scope = sessions ? { ...snapshot, sessions } : snapshot;
-  let codexPricing;
-  if (scope.codexPricing && scope.activeDeviceIds.includes("local")) {
-    const { dailyModels, sessionModels, ...reference } = scope.codexPricing;
-    const models = sessions
-      ? sessionModels.filter((model) =>
-          sessions.some((session) =>
-            hasPricedCodexModel(session, scope.source, model),
-          ),
-        )
-      : dailyModels;
-    if (models.length) codexPricing = { ...reference, models };
-  }
-  return {
-    codexPricing,
-    ...dshPricingMetadata(scope),
-  };
+  return dshPricingMetadata(sessions ? { ...snapshot, sessions } : snapshot);
 }
 
 export function buildUsageViewExport(
