@@ -51,7 +51,7 @@ export async function readUsageSnapshot({
           : [],
       sessions:
         sessions.status === "fulfilled"
-          ? usageSessionsFrom(sessions.value)
+          ? usageSessionsFrom(sessions.value, source)
           : [],
       ...(days.status === "rejected"
         ? { error: "本机用量读取失败；请检查 ccusage 和本地日志。" }

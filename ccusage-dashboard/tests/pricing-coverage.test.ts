@@ -394,13 +394,13 @@ test("focused reports preserve missing prices; old active zero-cost reports rema
   assert.equal(pricingState(createEmptyTotals()), "complete");
 });
 
-test("re-exported external pricing retains its reader provenance instead of using the local version", () => {
+test("an individual DSH import re-exported from all-Agent scope keeps its source and original pricing", () => {
   const range = resolveUsageRange({ start: "2026-10-05", end: "2026-10-05" });
   const imported = {
     id: "external",
     kind: "imported" as const,
     name: "External",
-    source: "codex" as const,
+    source: "dsh" as const,
     dailyEntries: 1,
     latestDate: "2026-10-05",
     updatedAt: null,
@@ -420,7 +420,28 @@ test("re-exported external pricing retains its reader provenance instead of usin
     }),
     readerVersion: "20.0.30",
   };
-  assert.equal(buildUsageViewExport(snapshot, "all").readerVersion, "20.0.19");
+  const exported = buildUsageViewExport(snapshot, "all");
+  assert.equal(exported.source, "dsh");
+  assert.equal(exported.reader, undefined);
+  assert.equal(exported.readerVersion, "20.0.19");
+  const roundTrip = validateUsageImport(
+    exported,
+    imported.name,
+    exported.source,
+  );
+  const focused = assembleUsageSnapshot({
+    range,
+    source: "dsh",
+    device: "external",
+    local: null,
+    imports: {
+      devices: [{ ...imported, source: roundTrip.source }],
+      dailyByDevice: { external: roundTrip.daily },
+      warnings: [],
+    },
+  });
+  assert.equal(focused.totals.totalTokens, snapshot.totals.totalTokens);
+  assert.equal(focused.totals.costUSD, snapshot.totals.costUSD);
   snapshot.devices[1].readerVersion = undefined;
   assert.equal(buildUsageViewExport(snapshot, "all").readerVersion, undefined);
 });

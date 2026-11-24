@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatCost, formatTokens } from "@/lib/format";
 import { downloadJsonFile } from "@/lib/download";
+import { usageExportOrigin } from "@/lib/usage-export";
 import {
   calendarPeriods,
   grains,
@@ -107,11 +108,9 @@ function UsageTrend({
         `token-atlas-${state.grain}-${snapshot.range.start}-${snapshot.range.end}.json`,
         {
           range: snapshot.range,
-          source: snapshot.source,
+          ...usageExportOrigin(snapshot),
           devices: snapshot.activeDeviceIds,
           grain: state.grain,
-          readerVersion: snapshot.readerVersion,
-          reader: snapshot.reader,
           warnings: snapshot.warnings,
           periods,
         },

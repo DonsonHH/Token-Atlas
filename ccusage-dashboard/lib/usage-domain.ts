@@ -4,6 +4,7 @@ import type {
   UsageModel,
   UsagePeriod,
   UsageSession,
+  UsageSource,
   UsageTotals,
 } from "./usage-types";
 import { validDateKey } from "./usage-range";
@@ -244,7 +245,10 @@ export function usagePeriodsFrom(report: unknown, key: string): UsagePeriod[] {
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
-export function usageSessionsFrom(report: unknown): UsageSession[] {
+export function usageSessionsFrom(
+  report: unknown,
+  scope: UsageSource = "all",
+): UsageSession[] {
   const rawReport = asRecord(report);
   const rawSessions = asArray(rawReport.sessions);
   const records = (
@@ -269,9 +273,9 @@ export function usageSessionsFrom(report: unknown): UsageSession[] {
           ? Object.keys(models)
           : reportedModels,
         project: asString(record.project) ?? asString(record.directory),
-        source: usageSourceOptions.find(
-          (source) => source.value === record.agent,
-        )?.value,
+        source:
+          usageSourceOptions.find((source) => source.value === record.agent)
+            ?.value ?? (scope === "all" ? undefined : scope),
       };
     })
     .sort((left, right) => {

@@ -16,6 +16,7 @@ import { validateUsageImport } from "../lib/usage-import-validation";
 
 const exec = promisify(execFile);
 const cli = resolve("node_modules/ccusage/src/cli.js");
+const dshRootName = "fixture-native-dsh";
 const timestamp = "2026-07-10T00:00:00Z";
 const plain =
   [
@@ -71,6 +72,7 @@ function fixtureEnvironment(
     CCUSAGE_MODEL_ALIASES: modelAliases,
     SystemRoot: process.env.SystemRoot,
     CODEX_HOME: home,
+    DSH_HOME: join(home, dshRootName),
     HOME: home,
     USERPROFILE: home,
     APPDATA: join(home, "appdata"),
@@ -291,7 +293,7 @@ test("focused and unified dashboard reports use native DSH tokens and prices onc
     const time = Date.parse(timestamp);
     await writeRollout(
       home,
-      ".dsh/sessions/test/session/session.v4.jsonl",
+      `${dshRootName}/sessions/test/session/session.v4.jsonl`,
       [
         {
           type: "session",
@@ -328,7 +330,6 @@ test("focused and unified dashboard reports use native DSH tokens and prices onc
       end: "2026-07-10",
       timezone: "Asia/Shanghai",
     });
-    const dshHome = join(home, ".dsh");
     await writeRollout(
       home,
       ".ccusage/ccusage.json",
@@ -347,7 +348,7 @@ test("focused and unified dashboard reports use native DSH tokens and prices onc
     );
     const options = {
       cwd: home,
-      env: { ...fixtureEnvironment(home), DSH_HOME: dshHome },
+      env: fixtureEnvironment(home),
     };
     const bounds = ["--since", range.start, "--until", range.end];
     const [directDaily, directSessions, directAll] = await Promise.all([
@@ -375,10 +376,9 @@ test("focused and unified dashboard reports use native DSH tokens and prices onc
     );
     const unified = await readCcusageReport("all", "daily", range, options);
     assert.deepEqual(usagePeriodsFrom(focusedDaily, "daily"), [dshDay]);
-    assert.deepEqual(
-      usageSessionsFrom(focusedSessions),
-      usageSessionsFrom(directSessions),
-    );
+    const scopedSessions = usageSessionsFrom(focusedSessions, "dsh");
+    assert.deepEqual(scopedSessions, usageSessionsFrom(directSessions, "dsh"));
+    assert.equal(scopedSessions[0].source, "dsh");
     assert.deepEqual(
       usagePeriodsFrom(unified, "daily"),
       usagePeriodsFrom(directAll, "daily"),
@@ -445,8 +445,20 @@ test(
       ];
       const encode = (records: object[]) =>
         records.map((record) => JSON.stringify(record)).join("\n") + "\n";
-      const history = ".dsh/sessions/test/compressed/";
-      await writeRollout(home, history + "session.v3.jsonl", encode(rows));
+      const history = `${dshRootName}/sessions/test/compressed/`;
+      await writeRollout(
+        home,
+        history + "session.v3.jsonl",
+        encode([
+          ...rows.slice(0, 2),
+          {
+            ...rows[2],
+            data: {
+              usage: { inputTokens: 99, outputTokens: 1, totalTokens: 100 },
+            },
+          },
+        ]),
+      );
       await writeRollout(
         home,
         history + "session.v4.jsonl.zstd",

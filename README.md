@@ -119,6 +119,8 @@ bash export-jetson-usage.sh ~/jetson-dsh.json "NVIDIA Jetson Orin Nano" dsh
 
 导入前会检查日期和数值，拒绝多设备合并导出文件。更新以临时文件原子替换，并把上一份保存为 `data/devices/<id>.bak`。导入只保存用量字段，不保存对话内容。外部数据已经按日聚合，使用导出端的日期口径；要精确比较两台设备，请在 ccusage 导出时使用相同的时区。
 
+重新导出单一外部设备时，保留原 Agent 和已记录的读取器版本；不会贴上本机读取器标签。
+
 ### 3. 在命令行导入（兼容原工作流）
 
 复制 JSON 全文后，在 `ccusage-dashboard` 目录运行：

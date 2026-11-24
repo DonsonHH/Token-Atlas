@@ -12,11 +12,7 @@ import { scanJsonl } from "../lib/native-jsonl";
 import { createPerformanceReader } from "../lib/performance-read-service";
 import type { PerformanceReport } from "../lib/performance-types";
 import { indexTimingFiles } from "../lib/timing-file-index";
-import {
-  TIMING_BATCH_MS,
-  TIMING_INVENTORY_LIMIT,
-  TIMING_SCOPE_FILES,
-} from "../lib/timing-limits";
+import { TIMING_BATCH_MS, TIMING_INVENTORY_LIMIT } from "../lib/timing-limits";
 const base = Date.parse("2026-11-23T04:00:00Z");
 const time = (ms: number) => new Date(base + ms).toISOString();
 const event = (ms: number, type: string, payload: object) => ({

@@ -8,8 +8,6 @@ export type UsageViewExport = Pick<
   UsageSnapshot,
   | "activeDeviceIds"
   | "range"
-  | "readerVersion"
-  | "reader"
   | "warnings"
   | "daily"
   | "generatedAt"
@@ -19,8 +17,33 @@ export type UsageViewExport = Pick<
   | "weekly"
 > & {
   devices: UsageSnapshot["devices"];
+} & UsageExportOrigin;
+
+type UsageExportOrigin = {
   source: UsageSource;
+  reader?: UsageSnapshot["reader"];
+  readerVersion?: string;
 };
+
+/** Attribute an export only to the device that contributed its data. */
+export function usageExportOrigin(
+  snapshot: Pick<
+    UsageSnapshot,
+    "activeDeviceIds" | "devices" | "reader" | "readerVersion" | "source"
+  >,
+  source = snapshot.source,
+): UsageExportOrigin {
+  if (snapshot.activeDeviceIds.length !== 1) return { source };
+  const device = snapshot.devices.find(
+    ({ id }) => id === snapshot.activeDeviceIds[0],
+  );
+  if (device?.kind === "imported") {
+    return { source: device.source, readerVersion: device.readerVersion };
+  }
+  return device?.kind === "local"
+    ? { source, reader: snapshot.reader, readerVersion: snapshot.readerVersion }
+    : { source };
+}
 
 export function buildUsageViewExport(
   snapshot: UsageSnapshot,
@@ -32,14 +55,7 @@ export function buildUsageViewExport(
 
   return {
     range: snapshot.range,
-    reader: snapshot.reader,
-    // An external-only re-export must not claim the local reader repriced it.
-    readerVersion:
-      devices.length === 1
-        ? devices[0].kind === "local"
-          ? snapshot.readerVersion
-          : devices[0].readerVersion
-        : undefined,
+    ...usageExportOrigin(snapshot, source),
     warnings: snapshot.warnings,
     activeDeviceIds: snapshot.activeDeviceIds,
     daily: snapshot.daily,
@@ -47,7 +63,6 @@ export function buildUsageViewExport(
     generatedAt: snapshot.generatedAt,
     models: snapshot.models,
     monthly: snapshot.monthly,
-    source,
     totals: snapshot.totals,
     weekly: snapshot.weekly,
   };
