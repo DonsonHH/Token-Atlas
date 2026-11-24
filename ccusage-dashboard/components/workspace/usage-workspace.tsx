@@ -133,14 +133,14 @@ export function UsageWorkspace() {
       setMenuOpen(false);
     } else router.replace(url, { scroll: false });
   }
-  async function reload() {
+  async function reload(target: "usage" | "performance") {
     if (manualRefreshLock.current) return;
     manualRefreshLock.current = true;
     setManualRefreshing(true);
-    const target = refreshesTiming ? "请求性能" : "用量";
-    const id = toast.loading(`正在更新${target}…`, { id: "usage-refresh" });
+    const label = target === "performance" ? "请求性能" : "用量";
+    const id = toast.loading(`正在更新${label}…`, { id: "usage-refresh" });
     try {
-      if (refreshesTiming) {
+      if (target === "performance") {
         const result = await performance.refresh();
         if (result) toast.success("请求性能已更新", { id });
         else toast.dismiss(id);
@@ -275,7 +275,7 @@ export function UsageWorkspace() {
           <Button
             variant="outline"
             disabled={loading || manualRefreshing}
-            onClick={() => void reload()}
+            onClick={() => void reload(refreshesTiming ? "performance" : "usage")}
             className="h-9 gap-2 px-2.5"
             aria-label={refreshesTiming ? "刷新请求性能" : "刷新用量"}
           >
@@ -419,7 +419,7 @@ export function UsageWorkspace() {
                 variant="outline"
                 className="h-8 text-xs"
                 disabled={loading || manualRefreshing}
-                onClick={() => void reload()}
+                onClick={() => void reload("usage")}
               >
                 重试
               </Button>

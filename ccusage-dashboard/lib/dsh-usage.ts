@@ -420,10 +420,13 @@ export async function readDshTiming(range: UsageRange, home: string) {
   // Discovery has already enforced the directory bound; trim obvious
   // out-of-range sessions without decoding them.
   const lower = range.allTime ? 0 : Date.parse(shiftDate(range.start, -1));
+  const upper = range.allTime
+    ? Number.POSITIVE_INFINITY
+    : Date.parse(shiftDate(range.end, 2));
   let errors = discovered.failed;
   const files: (TimingFile & { version: number })[] = [];
   for (const { path, version } of discovered.files) {
-    if (inventory.exhausted()) break;
+    if (inventory.timeLimitReached()) break;
     try {
       const file = await timingFile(path);
       if (file.modified >= lower) files.push({ ...file, version });
@@ -431,7 +434,17 @@ export async function readDshTiming(range: UsageRange, home: string) {
       errors++;
     }
   }
-  files.sort((a, b) => b.modified - a.modified || a.path.localeCompare(b.path));
+  // Later-modified sessions may span the range, but they must not displace
+  // every session whose modification time is already near the selected day.
+  files.sort((a, b) => {
+    const aLater = a.modified >= upper;
+    const bLater = b.modified >= upper;
+    return (
+      Number(aLater) - Number(bLater) ||
+      (aLater ? a.modified - b.modified : b.modified - a.modified) ||
+      a.path.localeCompare(b.path)
+    );
+  });
   return indexTimingFiles(
     "dsh",
     home,

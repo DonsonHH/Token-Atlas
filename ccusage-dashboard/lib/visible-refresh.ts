@@ -7,6 +7,7 @@ export function watchVisibleRefresh(
   refresh: () => Promise<unknown>,
   interval: number,
   timers: {
+    now: () => number;
     set: (run: () => void, delay: number) => number;
     clear: (id: number) => void;
   },
@@ -14,9 +15,18 @@ export function watchVisibleRefresh(
   let active = true;
   let scheduled: number | undefined;
   let pending = false;
+  let nextRefresh = timers.now();
   function clear() {
     if (scheduled !== undefined) timers.clear(scheduled);
     scheduled = undefined;
+  }
+  function schedule() {
+    clear();
+    if (!active || pending || page.visibilityState !== "visible") return;
+    scheduled = timers.set(
+      () => void run(),
+      Math.max(0, nextRefresh - timers.now()),
+    );
   }
   async function run() {
     clear();
@@ -28,20 +38,15 @@ export function watchVisibleRefresh(
       // A transient read error is surfaced by the report and retried later.
     } finally {
       pending = false;
-      if (active && page.visibilityState === "visible")
-        scheduled = timers.set(() => void run(), interval);
+      nextRefresh = timers.now() + interval;
+      schedule();
     }
   }
-  function onVisibility() {
-    clear();
-    if (page.visibilityState === "visible") void run();
-  }
-  page.addEventListener("visibilitychange", onVisibility);
-  if (page.visibilityState === "visible")
-    scheduled = timers.set(() => void run(), 0);
+  page.addEventListener("visibilitychange", schedule);
+  schedule();
   return () => {
     active = false;
     clear();
-    page.removeEventListener("visibilitychange", onVisibility);
+    page.removeEventListener("visibilitychange", schedule);
   };
 }

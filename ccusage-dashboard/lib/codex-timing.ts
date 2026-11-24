@@ -90,14 +90,15 @@ async function parseCodexRollout(
     completion: { id?: string; cumulative?: string },
   ) {
     const { id, cumulative } = completion;
+    const sameTotals =
+      cumulative !== undefined && cumulative === lastDone?.cumulative;
     const mirror =
       lastDone &&
-      !newOutput &&
       Math.abs(at - lastDone.at) <= 1000 &&
       usage.fingerprint === lastDone.key &&
-      (!cumulative ||
-        !lastDone.cumulative ||
-        cumulative === lastDone.cumulative);
+      // A late output item does not separate two reports of the same
+      // cumulative usage. Without that proof, keep the conservative guard.
+      (sameTotals || (!newOutput && (!cumulative || !lastDone.cumulative)));
     if (!id && mirror && lastDone?.native) return;
     if (id && responseIds.has(id)) return;
     if (id) responseIds.add(id);
@@ -328,7 +329,7 @@ async function listRollouts(homes: readonly string[], range: UsageRange) {
       const entries = await inventory.children(path);
       // Avoid Promise.all per file: hundreds of concurrent handles can starve the dashboard.
       for (const entry of entries) {
-        if (inventory.exhausted()) break;
+        if (inventory.timeLimitReached()) break;
         const full = join(path, entry.name);
         if (entry.isDirectory()) {
           await walk(full, archive);

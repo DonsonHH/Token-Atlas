@@ -103,9 +103,16 @@ export async function scanJsonl(
   const stopped = Symbol("timing limit");
   let decoded = 0;
   let limited = false;
-  const finish = (): TimingRead => ({ decodedBytes: decoded, limited });
+  let timedOut = false;
+  const finish = (): TimingRead => ({
+    decodedBytes: decoded,
+    limited,
+    ...(timedOut ? { timedOut } : {}),
+  });
   if (!bytes) return finish();
-  if (budget && (budget.maxBytes <= 0 || Date.now() >= budget.deadline))
+  if (budget && Date.now() >= budget.deadline)
+    return { decodedBytes: 0, limited: true, timedOut: true };
+  if (budget && budget.maxBytes <= 0)
     return { decodedBytes: 0, limited: true };
   const compressed = /\.zst(?:d)?$/.test(file);
   const createNative = (
@@ -158,6 +165,7 @@ export async function scanJsonl(
   function checkDeadline() {
     if (budget && Date.now() >= budget.deadline) {
       limited = true;
+      timedOut = true;
       throw stopped;
     }
   }

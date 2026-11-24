@@ -9,4 +9,8 @@ export const TIMING_INVENTORY_MS = 1_250;
 export const TIMING_REPORT_TTL_MS = 15_000;
 
 export type TimingBudget = { maxBytes: number; deadline: number };
-export type TimingRead = { decodedBytes: number; limited: boolean };
+export type TimingRead = {
+  decodedBytes: number;
+  limited: boolean;
+  timedOut?: boolean;
+};

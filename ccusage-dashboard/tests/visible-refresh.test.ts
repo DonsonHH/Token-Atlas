@@ -11,12 +11,23 @@ class Page extends EventTarget {
   }
 }
 
-test("request auto-refresh is 60 seconds, pauses while hidden and resumes without overlap", async () => {
+test("request auto-refresh pauses while hidden without losing its 60-second cadence", async () => {
   const page = new Page();
   const scheduled = new Map<number, { run: () => void; delay: number }>();
-  let clock = 0;
+  let timerId = 0;
+  let now = 1000;
   let calls = 0;
   let settle!: () => void;
+  const timers = {
+    now: () => now,
+    set: (run: () => void, delay: number) => {
+      scheduled.set(++timerId, { run, delay });
+      return timerId;
+    },
+    clear: (id: number) => {
+      scheduled.delete(id);
+    },
+  };
   const stop = watchVisibleRefresh(
     page,
     () => {
@@ -26,20 +37,13 @@ test("request auto-refresh is 60 seconds, pauses while hidden and resumes withou
       });
     },
     PERFORMANCE_REFRESH_MS,
-    {
-      set: (run, delay) => {
-        scheduled.set(++clock, { run, delay });
-        return clock;
-      },
-      clear: (id) => {
-        scheduled.delete(id);
-      },
-    },
+    timers,
   );
   function fire(delay: number) {
     assert.equal(scheduled.size, 1);
     const [current] = scheduled.values();
     assert.equal(current.delay, delay);
+    now += delay;
     current.run();
   }
   fire(0);
@@ -55,7 +59,10 @@ test("request auto-refresh is 60 seconds, pauses while hidden and resumes withou
   await Promise.resolve();
   page.show("hidden");
   assert.equal(scheduled.size, 0);
+  now += 10_000;
   page.show("visible");
+  assert.equal(calls, 2, "showing a tab cannot bypass the cooldown");
+  fire(50_000);
   assert.equal(calls, 3);
   stop();
   settle();

@@ -29,7 +29,12 @@ type Projection = TimingRead & {
   skipped?: boolean;
   session?: string;
 };
-type Cached = { size: number; modified: number; parsed: Projection };
+type Cached = {
+  size: number;
+  modified: number;
+  parsed: Projection;
+  retryEarly: boolean;
+};
 type Index = {
   files: Map<string, Cached>;
   batch?: Promise<void>;
@@ -42,16 +47,22 @@ export function timingInventory() {
   const deadline = Date.now() + TIMING_INVENTORY_MS;
   let entries = 0;
   let truncated = false;
-  function exhausted() {
-    return (truncated ||=
-      entries >= TIMING_INVENTORY_LIMIT || Date.now() >= deadline);
+  function timeLimitReached() {
+    if (Date.now() < deadline) return false;
+    truncated = true;
+    return true;
+  }
+  function directoryLimitReached() {
+    if (entries < TIMING_INVENTORY_LIMIT) return timeLimitReached();
+    truncated = true;
+    return true;
   }
   async function children(path: string): Promise<Dirent[]> {
-    if (exhausted()) return [];
+    if (directoryLimitReached()) return [];
     const dir = await opendir(/* turbopackIgnore: true */ path);
     const found: Dirent[] = [];
     for await (const item of dir) {
-      if (exhausted()) break;
+      if (directoryLimitReached()) break;
       entries++;
       found.push(item);
     }
@@ -59,7 +70,7 @@ export function timingInventory() {
   }
   return {
     children,
-    exhausted,
+    timeLimitReached,
     get truncated() {
       return truncated;
     },
@@ -107,7 +118,7 @@ export async function indexTimingFiles<T extends TimingFile>(
   const selected = files.slice(0, TIMING_SCOPE_FILES);
   const lookup = ({ path, size, modified }: TimingFile) => {
     const c = cache.get(path);
-    return c?.size === size && c.modified === modified ? c.parsed : undefined;
+    return c?.size === size && c.modified === modified ? c : undefined;
   };
   if (!index.batch) {
     const target = index;
@@ -126,8 +137,13 @@ export async function indexTimingFiles<T extends TimingFile>(
       const deadline = Date.now() + TIMING_BATCH_MS;
       const keep = new Set(selected.map(({ path }) => path));
       for (const path of cache.keys()) if (!keep.has(path)) cache.delete(path);
-      for (const file of queue) {
-        if (lookup(file)) continue;
+      const shorted = queue.find((file) => lookup(file)?.retryEarly);
+      const ordered = shorted
+        ? [shorted, ...queue.filter((f) => f !== shorted)]
+        : queue;
+      for (const file of ordered) {
+        const prior = lookup(file);
+        if (prior && !prior.retryEarly) continue;
         // Every file, including the first, receives an in-decoder budget.
         if (
           parsed >= TIMING_BATCH_FILES ||
@@ -154,6 +170,9 @@ export async function indexTimingFiles<T extends TimingFile>(
           size: file.size,
           modified: file.modified,
           parsed: value,
+          // Give a file interrupted late in a shared batch one attempt with
+          // a fresh deadline, without repeatedly retrying a too-large file.
+          retryEarly: Boolean(value.timedOut && parsed > 0),
         });
         bytes += value.decodedBytes;
         parsed++;
@@ -176,7 +195,7 @@ export async function indexTimingFiles<T extends TimingFile>(
   const evidence: TimingEvidence[] = [];
   const sessions = new Set<string>();
   for (const file of selected) {
-    const parsed = lookup(file);
+    const parsed = lookup(file)?.parsed;
     if (!parsed) coverage.pending++;
     else if (parsed.skipped && !parsed.limited) coverage.skipped++;
     else {

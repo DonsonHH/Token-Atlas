@@ -87,6 +87,7 @@ export function usePerformanceReport(
       },
       PERFORMANCE_REFRESH_MS,
       {
+        now: () => performance.now(),
         set: (run, delay) => window.setTimeout(run, delay),
         clear: (timer) => window.clearTimeout(timer),
       },

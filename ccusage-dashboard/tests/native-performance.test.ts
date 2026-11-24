@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import type { Dir, Dirent, PathLike } from "node:fs";
+import fs from "node:fs/promises";
 import { mkdir, mkdtemp, open, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -10,6 +12,11 @@ import { scanJsonl } from "../lib/native-jsonl";
 import { createPerformanceReader } from "../lib/performance-read-service";
 import type { PerformanceReport } from "../lib/performance-types";
 import { indexTimingFiles } from "../lib/timing-file-index";
+import {
+  TIMING_BATCH_MS,
+  TIMING_INVENTORY_LIMIT,
+  TIMING_SCOPE_FILES,
+} from "../lib/timing-limits";
 const base = Date.parse("2026-11-23T04:00:00Z");
 const time = (ms: number) => new Date(base + ms).toISOString();
 const event = (ms: number, type: string, payload: object) => ({
@@ -144,7 +151,11 @@ test(
         { maxBytes: compressed.length, deadline: 2000 },
       );
       assert.deepEqual(lines, ["header"]);
-      assert.deepEqual(result, { decodedBytes: 7, limited: true });
+      assert.deepEqual(result, {
+        decodedBytes: 7,
+        limited: true,
+        timedOut: true,
+      });
     }),
 );
 
@@ -211,6 +222,29 @@ test("a very wide timing selection has finite coverage, not an unbounded pending
   assert.equal(last.coverage.scanned, 128);
   assert.equal(last.coverage.pending, 0);
   assert.equal(last.coverage.limited, 2);
+});
+
+test("a session cut short by earlier files in its batch can complete on the next refresh", async (t) => {
+  let now = 1000;
+  t.mock.method(Date, "now", () => now);
+  const files = [
+    { path: "first", size: 100, modified: 1 },
+    { path: "next", size: 100, modified: 2 },
+  ];
+  const read = () =>
+    indexTimingFiles(
+      "dsh",
+      "deadline-retry-fixture",
+      files,
+      async (file, budget) => {
+        now += file.path === "first" ? TIMING_BATCH_MS - 5 : 10;
+        const timedOut = now >= budget.deadline;
+        return { samples: [], decodedBytes: 100, limited: timedOut, timedOut };
+      },
+      0,
+    );
+  assert.equal((await read()).coverage.limited, 1);
+  assert.equal((await read()).coverage.scanned, 2);
 });
 
 test("a recent Codex range does not start indexing unrelated old rollouts", () =>
@@ -413,6 +447,34 @@ test("DSH retries restart timing and an interrupted request or a control frame i
     assert.ok(!JSON.stringify(report).includes("fixture-request-dsh"));
   }));
 
+test("a late assistant item does not duplicate the same Codex settlement", () =>
+  fixture(async (roots) => {
+    await log(
+      join(
+        roots.codex,
+        "sessions",
+        "rollout-2026-11-23T12-00-00-00000000-0000-4000-8000-000000000017.jsonl",
+      ),
+      [
+        event(0, "session_meta", { id: "mirror-fixture" }),
+        event(100, "turn_context", { model: "gpt-6.2-sol" }),
+        event(1500, "token_usage_record", {
+          response_id: "one-settlement",
+          usage,
+          thread_token_usage: usage,
+        }),
+        event(1700, "response_item", { type: "message", role: "assistant" }),
+        event(1900, "event_msg", {
+          type: "token_count",
+          info: { last_token_usage: usage, total_token_usage: usage },
+        }),
+      ],
+    );
+    const report = await readNativePerformance(range, "codex", roots);
+    assert.equal(report.totals.requests, 1);
+    assert.equal(report.recent.length, 1);
+  }));
+
 test("nearby Codex responses with equal usage are not mirrors across distinct output evidence", () =>
   fixture(async (roots) => {
     const file = join(
@@ -472,6 +534,88 @@ test("Codex timing follows the configured comma-separated log roots", () =>
     });
     assert.equal(result.totals.requests, 2);
     assert.equal(result.coverage[0].scanned, 2);
+  }));
+
+test("a narrow historical DSH date range keeps matching sessions ahead of newer ones", () =>
+  fixture(async (roots) => {
+    const session = (id: string) =>
+      join(roots.dsh, "sessions", "fixture", id, "session.v4.jsonl");
+    const later = new Date(base + 7 * 86_400_000);
+    await Promise.all(
+      Array.from({ length: TIMING_SCOPE_FILES }, async (_, index) => {
+        const id = `newer-${index}`;
+        await log(session(id), [
+          { type: "session", version: 4, id, isSeeded: false },
+        ]);
+        await utimes(session(id), later, later);
+      }),
+    );
+    const path = session("historical");
+    await log(path, [
+      { type: "session", version: 4, id: "historical", isSeeded: false },
+      { type: "step/start", seq: 0, time: base, data: { turn: 1, step: 1 } },
+      {
+        type: "assistant/message",
+        seq: 1,
+        time: base + 2000,
+        data: {
+          turn: 1,
+          step: 1,
+          message: {
+            id: "historical-result",
+            source: { model: "deepseek-flash" },
+          },
+          usage: { inputTokens: 100, outputTokens: 600 },
+        },
+      },
+    ]);
+    const date = new Date(base + 2000);
+    await utimes(path, date, date);
+    const report = await readNativePerformance(range, "dsh", roots);
+    assert.equal(report.totals.requests, 1);
+    assert.ok(report.coverage[0].limited > 0);
+  }));
+
+test("DSH timing retains discovered sessions when directory inventory is capped", (t) =>
+  fixture(async (roots) => {
+    const project = join(roots.dsh, "sessions", "fixture");
+    const valid = join(project, "a-valid", "session.v4.jsonl");
+    const junk = join(project, "z-other");
+    await log(valid, [
+      { type: "session", version: 4, id: "valid", isSeeded: false },
+    ]);
+    await mkdir(junk);
+    await utimes(valid, new Date(base), new Date(base));
+    const { opendir, readdir } = fs;
+    const fakeDir = (entries: () => Iterable<Dirent>) =>
+      ({
+        async *[Symbol.asyncIterator]() {
+          yield* entries();
+        },
+      }) as Dir;
+    t.mock.method(Date, "now", () => base);
+    t.mock.method(fs, "opendir", async (directory: PathLike) => {
+      if (directory === project) {
+        const entries = await readdir(project, { withFileTypes: true });
+        return fakeDir(() =>
+          entries.sort((a, b) => a.name.localeCompare(b.name)),
+        );
+      }
+      if (directory === junk)
+        return fakeDir(function* () {
+          for (let n = 0; n <= TIMING_INVENTORY_LIMIT; n++)
+            yield { name: `irrelevant-${n}`, isFile: () => false } as Dirent;
+        });
+      return opendir(directory);
+    });
+    const report = await readNativePerformance(range, "dsh", roots);
+    assert.deepEqual(report.coverage[0], {
+      agent: "dsh",
+      scanned: 1,
+      pending: 0,
+      skipped: 0,
+      limited: 1,
+    });
   }));
 
 test("DSH timing indexes history in bounded batches and fills it without duplicate requests", () =>
