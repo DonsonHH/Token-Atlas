@@ -79,7 +79,7 @@ pnpm dev
 .\scripts\open-dashboard.ps1
 ```
 
-脚本会检查本地服务；未运行时只启动一个生产实例，再打开浏览器。首次或源码更新时构建一次，平时不运行开发监听器。依赖升级后请重新执行 `pnpm install`。
+脚本会复用正在运行的服务。需要启动时，它只开一个生产实例；首次启动或源码已更新时会重新构建，不常驻开发监听器。更新已有实例时，参见[缺价排查](#参考价为零或待定价)中的停止、安装和重启步骤。
 
 ### 输出速度与首字
 
@@ -224,7 +224,14 @@ TOKEN_ATLAS_DISABLE_PERFORMANCE=1 pnpm exec next start --hostname 0.0.0.0 --port
 
 ### 页面没有本机数据
 
-在应用目录运行 `pnpm exec ccusage daily --json --offline`。若没有记录，请确认这台机器已有受支持 Agent 的本地日志，并已完成 `pnpm install`。需要缩小范围时，可添加 `--since YYYY-MM-DD --until YYYY-MM-DD`。
+在应用目录检查离线报表（PowerShell）：
+
+```powershell
+$env:CCUSAGE_TELEMETRY_DISABLED = "1"
+pnpm exec ccusage daily --json --offline
+```
+
+只看 DSH 时，将 `daily` 改为 `dsh daily`。可添加 `--since YYYY-MM-DD --until YYYY-MM-DD`，并用 `--timezone Asia/Shanghai` 指定与网页一致的时区（按实际设置修改）。若没有记录，请确认本机有受支持的 Agent 日志，并已安装锁定依赖。
 
 ### 导入设备没有显示
 
@@ -234,21 +241,21 @@ TOKEN_ATLAS_DISABLE_PERFORMANCE=1 pnpm exec next start --hostname 0.0.0.0 --port
 
 先检查数据源页面的读取器版本。Codex 的历史日志可能保存为 `.jsonl.zst`；ccusage 20.0.30 不支持该格式，直到 [20.0.33](https://github.com/ccusage/ccusage/releases/tag/v20.0.33) 才加入支持。项目现使用 20.1.1，可直接读取 `sessions/` 和 `archived_sessions/` 下的普通与压缩日志，无需手动解压或修改原日志。
 
-拉取新版项目后运行 `pnpm install`，重启正在运行的网页服务，再刷新全部日期。外部设备若曾用旧版生成报告，需要使用新版导出脚本重新导出并更新对应设备；旧汇总本身无法补出漏读的用量。
+拉取新版项目后，按[缺价排查](#参考价为零或待定价)中的步骤安装锁定依赖、重建并重启服务，再刷新全部日期。外部设备若曾用旧版生成报告，需要使用新版导出脚本重新导出并更新对应设备；旧汇总本身无法补出漏读的用量。
 
 ### 成本数字与账单不一致
 
 这是预期行为。Token Atlas 展示的是 ccusage 根据本地定价表推导的参考值，不是官方结算金额。
 
-### 有 token，但近期参考价为零或“待定价”
+### 参考价为零或待定价
 
-先在数据源页面确认读取器版本，再检查数据提示中的模型名称。老版本可能尚未包含新模型价格，升级网页依赖后刷新：
+先在「数据源」确认本机读取器版本，再检查提示中的模型和 Agent。旧实例不会随代码或依赖更新自动退出；刷新网页、关闭浏览器或再次打开快捷方式，都不会替换仍在运行的旧服务。
 
-```powershell
-pnpm install
-```
+1. 停止当前 Token Atlas 服务。如果从终端启动，在该终端按 `Ctrl+C`；如果使用快捷方式，只停止对应的本机服务进程。
+2. 在 `ccusage-dashboard` 运行 `pnpm install --frozen-lockfile`。
+3. 重新打开 Windows 快捷方式，或依次执行 `pnpm build` 和 `pnpm start`。刷新后核对读取器版本，按原 Agent、日期和时区复查。
 
-本项目已固定新版依赖；如果以后需要升级，请同时更新 `package.json`、锁文件和 Jetson 导出脚本，并运行 `pnpm verify`。外部设备的数据需要在原设备重新导出并导入，不能仅靠刷新本机修复。新版依然缺价时，请核实模型与服务商，再参考 ccusage 的定价覆盖配置；不要自行填入猜测价格。
+如果只有外部设备缺价，请用新版导出脚本在原设备重新导出并更新导入。若本机新版本仍缺价，先核实实际模型和服务商，再参考 ccusage 的[定价覆盖配置](https://ccusage.com/guide/config-files)；不要填入猜测价格。
 
 ## 贡献与许可
 
