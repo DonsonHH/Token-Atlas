@@ -407,6 +407,60 @@ test("focused and unified dashboard reports use native DSH tokens and prices onc
   }
 });
 
+test("DSH prices GPT-6.2 Sol from the shipped offline catalog", async () => {
+  const home = await mkdtemp(join(tmpdir(), "token-atlas-codex-test-"));
+  try {
+    const model = "gpt-6.2-sol";
+    const time = Date.parse(timestamp);
+    const rows = [
+      {
+        type: "session",
+        id: "dsh-sol-native",
+        createdAt: time,
+        isSeeded: false,
+        cwd: "/fixture",
+      },
+      {
+        type: "request/context",
+        seq: 1,
+        time,
+        data: { provider: "openai", model },
+      },
+      {
+        type: "assistant/message",
+        seq: 2,
+        time,
+        data: {
+          usage: { inputTokens: 150, outputTokens: 50, totalTokens: 200 },
+        },
+      },
+    ];
+    await writeRollout(
+      home,
+      dshRootName + "/sessions/test/sol/session.v4.jsonl",
+      rows.map((row) => JSON.stringify(row)).join("\n") + "\n",
+    );
+    const range = resolveUsageRange({
+      start: "2026-07-10",
+      end: "2026-07-10",
+      timezone: "Asia/Shanghai",
+    });
+    const options = { cwd: home, env: fixtureEnvironment(home) };
+    for (const source of ["dsh", "all"] as const) {
+      const report = await readCcusageReport(source, "daily", range, options);
+      const [day] = usagePeriodsFrom(report, "daily");
+      assert.equal(day.totalTokens, 200);
+      assert.equal(day.models[model]?.totalTokens, 200);
+      assert.equal(day.models[model]?.missingPricing, undefined);
+      assert.ok(!day.unpricedModels?.includes(model));
+      // Standard short-context rates: USD 2/M input and 10/M output.
+      assert.equal(+day.costUSD.toFixed(9), 0.0008);
+    }
+  } finally {
+    await removeFixture(home);
+  }
+});
+
 const zstdCompress = (
   zlib as typeof zlib & { zstdCompressSync?: (data: Buffer) => Buffer }
 ).zstdCompressSync;
